@@ -1,0 +1,1046 @@
+import { Farm, PoultryCycle, FeedPurchase, MedicationPurchase, Expense, WholesaleSale, Partner, Worker, WorkerTransaction, CashAccount, FinancialTransaction, DailyLog, AuditLogEntry, AppNotification, User } from '../types';
+
+export const INITIAL_USERS: User[] = [
+  { id: 'usr-1', name: 'الحاج عثمان الإدريسي', phone: '0661122334', role: 'admin' },
+  { id: 'usr-2', name: 'رشيد العمراني (مدير مزرعة 1)', phone: '0662233445', role: 'farm_manager', allowedFarmIds: ['farm-1'] },
+  { id: 'usr-3', name: 'ياسين بنسالم (المحاسب)', phone: '0663344556', role: 'accountant' },
+  { id: 'usr-4', name: 'حمزة التازي (مشرف عنبر)', phone: '0664455667', role: 'worker', allowedFarmIds: ['farm-1', 'farm-2'] }
+];
+
+export const INITIAL_FARMS: Farm[] = [
+  {
+    id: 'farm-1',
+    name: 'مزرعة النور (سيدي علال البحراوي)',
+    location: 'إقليم الخميسات - طريق سيدي علال البحراوي',
+    areaSquareMeters: 8500,
+    barnsCount: 3,
+    capacity: 45000,
+    managerName: 'رشيد العمراني',
+    managerPhone: '0662233445',
+    status: 'active',
+    notes: 'مزرعة رئيسية مجهزة بنظام تهوية أوتوماتيكي ومولد كهربائي احتياطي.',
+    createdAt: '2025-01-10'
+  },
+  {
+    id: 'farm-2',
+    name: 'مزرعة البركة (عين عودة)',
+    location: 'عمالة الصخيرات تمارة - جماعة عين عودة',
+    areaSquareMeters: 6200,
+    barnsCount: 2,
+    capacity: 30000,
+    managerName: 'كمال الصنهاجي',
+    managerPhone: '0665566778',
+    status: 'active',
+    notes: 'عنابر أرضية مغلقة بنظام تبريد بالخلايا ومشارب نيبل حديثة.',
+    createdAt: '2025-02-15'
+  },
+  {
+    id: 'farm-3',
+    name: 'مزرعة الأمل (بنسليمان)',
+    location: 'ضواحي بنسليمان - سيدي يحيى زعير',
+    areaSquareMeters: 5000,
+    barnsCount: 2,
+    capacity: 25000,
+    managerName: 'عبد الرحيم العلمي',
+    managerPhone: '0667788990',
+    status: 'active',
+    notes: 'حظائر جديدة مخصصة لدورات التسمين السريع.',
+    createdAt: '2025-05-20'
+  }
+];
+
+export const INITIAL_CYCLES: PoultryCycle[] = [
+  {
+    id: 'cycle-1',
+    cycleNumber: 'دورة 2026-01 (مكتملة)',
+    farmId: 'farm-1',
+    barnNumber: 'عنبر 1 + عنبر 2',
+    startDate: '2026-05-01',
+    chickEntryDate: '2026-05-01',
+    expectedSaleDate: '2026-06-12',
+    actualSaleDate: '2026-06-14',
+    chickBreed: 'Cobb 500',
+    initialChickCount: 20000,
+    chickUnitPrice: 5.5,
+    chickSource: 'مفرخات الأطلس الممتازة',
+    status: 'completed',
+    targetWeightKg: 2.2,
+    notes: 'دورة ممتازة بمعدل تحويل غذائي 1.58 ونسبة نفوق منخفضة 3.8%.',
+    createdAt: '2026-05-01'
+  },
+  {
+    id: 'cycle-2',
+    cycleNumber: 'دورة 2026-02 (جاهزة للبيع)',
+    farmId: 'farm-2',
+    barnNumber: 'عنبر 1',
+    startDate: '2026-07-15',
+    chickEntryDate: '2026-07-15',
+    expectedSaleDate: '2026-08-30',
+    chickBreed: 'Ross 308',
+    initialChickCount: 18000,
+    chickUnitPrice: 5.8,
+    chickSource: 'شركة المغرب للكتاكيت',
+    status: 'ready_for_sale',
+    targetWeightKg: 2.3,
+    notes: 'الدجاج بلغ متوسط وزن 2.35 كغ وجاهز للتسويق هذا الأسبوع.',
+    createdAt: '2026-07-15'
+  },
+  {
+    id: 'cycle-3',
+    cycleNumber: 'دورة 2026-03 (قيد التربية - يوم 24)',
+    farmId: 'farm-1',
+    barnNumber: 'عنبر 1 + 2 + 3',
+    startDate: '2026-08-06',
+    chickEntryDate: '2026-08-06',
+    expectedSaleDate: '2026-09-18',
+    chickBreed: 'Cobb 500',
+    initialChickCount: 25000,
+    chickUnitPrice: 5.6,
+    chickSource: 'مفرخات الأطلس الممتازة',
+    status: 'in_rearing',
+    targetWeightKg: 2.25,
+    notes: 'الدورة في مرحلة علف النمو (Grower). الحالة الصحية ممتازة.',
+    createdAt: '2026-08-06'
+  },
+  {
+    id: 'cycle-4',
+    cycleNumber: 'دورة 2026-04 (قيد التربية - يوم 11)',
+    farmId: 'farm-3',
+    barnNumber: 'عنبر 1',
+    startDate: '2026-08-19',
+    chickEntryDate: '2026-08-19',
+    expectedSaleDate: '2026-10-01',
+    chickBreed: 'Hubbard Classic',
+    initialChickCount: 15000,
+    chickUnitPrice: 5.4,
+    chickSource: 'مفرخات الشاوية الحديثة',
+    status: 'in_rearing',
+    targetWeightKg: 2.15,
+    notes: 'مرحلة التحضين الأولى (Starter) واكتمل لقاح الغامبورو الأول.',
+    createdAt: '2026-08-19'
+  }
+];
+
+export const INITIAL_DAILY_LOGS: DailyLog[] = [
+  // Cycle 3 daily logs snippet
+  { id: 'log-3-20', cycleId: 'cycle-3', date: '2026-08-26', dayNumber: 20, mortalityCount: 12, feedConsumedKg: 1850, sampleAverageWeightGrams: 980, temperatureCelsius: 27, humidityPercent: 62, notes: 'تهوية طبيعية جيدة' },
+  { id: 'log-3-21', cycleId: 'cycle-3', date: '2026-08-27', dayNumber: 21, mortalityCount: 15, feedConsumedKg: 1950, sampleAverageWeightGrams: 1060, temperatureCelsius: 27.5, humidityPercent: 60 },
+  { id: 'log-3-22', cycleId: 'cycle-3', date: '2026-08-28', dayNumber: 22, mortalityCount: 9, feedConsumedKg: 2100, sampleAverageWeightGrams: 1140, temperatureCelsius: 26.8, humidityPercent: 65 },
+  { id: 'log-3-23', cycleId: 'cycle-3', date: '2026-08-29', dayNumber: 23, mortalityCount: 11, feedConsumedKg: 2200, sampleAverageWeightGrams: 1220, temperatureCelsius: 26.5, humidityPercent: 63 },
+  { id: 'log-3-24', cycleId: 'cycle-3', date: '2026-08-30', dayNumber: 24, mortalityCount: 14, feedConsumedKg: 2300, sampleAverageWeightGrams: 1310, temperatureCelsius: 27, humidityPercent: 61, notes: 'إضافة فيتامينات C في ماء الشرب لتقليل الإجهاد الحراري' },
+
+  // Cycle 2 daily logs snippet (mature)
+  { id: 'log-2-35', cycleId: 'cycle-2', date: '2026-08-20', dayNumber: 35, mortalityCount: 8, feedConsumedKg: 2700, sampleAverageWeightGrams: 2080 },
+  { id: 'log-2-36', cycleId: 'cycle-2', date: '2026-08-21', dayNumber: 36, mortalityCount: 6, feedConsumedKg: 2800, sampleAverageWeightGrams: 2160 },
+  { id: 'log-2-37', cycleId: 'cycle-2', date: '2026-08-22', dayNumber: 37, mortalityCount: 10, feedConsumedKg: 2850, sampleAverageWeightGrams: 2240 },
+  { id: 'log-2-38', cycleId: 'cycle-2', date: '2026-08-23', dayNumber: 38, mortalityCount: 7, feedConsumedKg: 2900, sampleAverageWeightGrams: 2310 },
+  { id: 'log-2-39', cycleId: 'cycle-2', date: '2026-08-24', dayNumber: 39, mortalityCount: 5, feedConsumedKg: 2950, sampleAverageWeightGrams: 2380, notes: 'تم أخذ عينة وزن 100 طائر، متوسط الوزن 2.38 كغ' }
+];
+
+export const INITIAL_PARTNERS: Partner[] = [
+  // Suppliers
+  {
+    id: 'part-sup-1',
+    name: 'شركة أعلاف الغرب المتحدة',
+    companyName: 'الغرب فيد للإنتاج الفلاحي (S.A)',
+    phone: '0537889900',
+    address: 'المنطقة الصناعية القنيطرة',
+    type: 'supplier',
+    activityType: 'أعلاف الدواجن المركبة (بادي، نامي، ناهي)',
+    openingBalance: 0,
+    notes: 'مورد معتمد للأعلاف عالية الجودة مع تسهيلات في الدفع 30 يوماً.',
+    createdAt: '2025-01-15'
+  },
+  {
+    id: 'part-sup-2',
+    name: 'مختبرات الأطلس البيطرية',
+    companyName: 'أطلس فارما فيت',
+    phone: '0522445566',
+    address: 'شارع الجيش الملكي، الدار البيضاء',
+    type: 'supplier',
+    activityType: 'أدوية ولقاحات ومطهرات بيطرية',
+    openingBalance: 0,
+    notes: 'توفير برامج التحصين والمتابعة الصحية الدورية.',
+    createdAt: '2025-01-20'
+  },
+  {
+    id: 'part-sup-3',
+    name: 'مفرخات الأطلس الممتازة',
+    companyName: 'الأطلس أكوفارم للتفريخ',
+    phone: '0535667788',
+    address: 'طريق فاس - مكناس',
+    type: 'supplier',
+    activityType: 'كتاكيت عمر يوم واحد (Cobb & Ross)',
+    openingBalance: 0,
+    notes: 'كتاكيت مختارة ذات أوزان وحيوية ممتازة.',
+    createdAt: '2025-02-01'
+  },
+  {
+    id: 'part-sup-4',
+    name: 'شركة محروقات الشاوية والغاز',
+    companyName: 'غاز أوريكس للتوزيع',
+    phone: '0523332211',
+    address: 'برشيد',
+    type: 'supplier',
+    activityType: 'غاز التدفئة والمحروقات للمولدات',
+    openingBalance: 0,
+    createdAt: '2025-02-10'
+  },
+
+  // Customers
+  {
+    id: 'part-cust-1',
+    name: 'محمد التاجي (تاجر سوق الجملة)',
+    companyName: 'مؤسسة التاجي للدواجن بالجملة',
+    phone: '0661445566',
+    address: 'سوق الجملة للدواجن، البيضاء',
+    type: 'customer',
+    activityType: 'تاجر جملة وتوزيع الدجاج الحي',
+    openingBalance: 0,
+    notes: 'زبون دائم يشتري كميات كبيرة بشاحنات مبردة.',
+    createdAt: '2025-03-01'
+  },
+  {
+    id: 'part-cust-2',
+    name: 'شركة مجازر الأطلس العصرية',
+    companyName: 'مذابح الأطلس الصناعية (SARL)',
+    phone: '0537665544',
+    address: 'المنطقة الصناعية سيدي بوقنادل سلا',
+    type: 'customer',
+    activityType: 'مجزرة صناعية وتوزيع الدواجن المذبوحة',
+    openingBalance: 0,
+    notes: 'دفع نصف المبلغ نقداً والباقي شيك لأجل 15 يوماً.',
+    createdAt: '2025-03-15'
+  },
+  {
+    id: 'part-cust-3',
+    name: 'يوسف بوعزة (موزع الرباط وتمارة)',
+    companyName: 'محلات بوعزة لتجارة اللحوم البيضاء',
+    phone: '0663778899',
+    address: 'حي يعقوب المنصور، الرباط',
+    type: 'customer',
+    activityType: 'موزع محلي لمتاجر البيع بالتقسيط',
+    openingBalance: 0,
+    createdAt: '2025-04-10'
+  },
+  {
+    id: 'part-cust-4',
+    name: 'الحاج عبد الله السوسي',
+    companyName: 'السوسي للتجارة العامة',
+    phone: '0668991122',
+    address: 'سوق الصالحين، سلا',
+    type: 'customer',
+    activityType: 'تاجر دواجن بالجملة',
+    openingBalance: 0,
+    createdAt: '2025-05-05'
+  }
+];
+
+export const INITIAL_ACCOUNTS: CashAccount[] = [
+  {
+    id: 'acc-caisse-main',
+    name: 'الصندوق الرئيسي (Caisse Centrale)',
+    type: 'cash',
+    openingBalance: 45000,
+    isDefault: true
+  },
+  {
+    id: 'acc-bank-attijari',
+    name: 'التجاري وفا بنك (Attijariwafa Bank)',
+    type: 'bank',
+    accountNumber: '007 810 00012345678901 45',
+    openingBalance: 165000
+  },
+  {
+    id: 'acc-bank-chaabi',
+    name: 'البنك الشعبي (Banque Populaire)',
+    type: 'bank',
+    accountNumber: '101 780 21211234567890 88',
+    openingBalance: 80000
+  },
+  {
+    id: 'acc-caisse-farm1',
+    name: 'صندوق مزرعة النور (مصاريف يومية)',
+    type: 'cash',
+    openingBalance: 12000
+  }
+];
+
+export const INITIAL_WORKERS: Worker[] = [
+  {
+    id: 'wrk-1',
+    name: 'عزيز المنصوري',
+    phone: '0664112233',
+    nationalId: 'AA123456',
+    jobTitle: 'مشرف عنابر وتغذية',
+    farmId: 'farm-1',
+    startDate: '2025-01-15',
+    monthlySalary: 4200,
+    paymentFrequency: 'monthly',
+    status: 'active',
+    notes: 'خبرة 7 سنوات في إدارة تهوية وحرارة الكتاكيت.'
+  },
+  {
+    id: 'wrk-2',
+    name: 'لحسن آيت علي',
+    phone: '0665223344',
+    nationalId: 'BB654321',
+    jobTitle: 'عامل نظافة وتوزيع العلف',
+    farmId: 'farm-1',
+    startDate: '2025-02-01',
+    monthlySalary: 3400,
+    paymentFrequency: 'monthly',
+    status: 'active'
+  },
+  {
+    id: 'wrk-3',
+    name: 'سعيد الحيمر',
+    phone: '0666334455',
+    nationalId: 'CC789123',
+    jobTitle: 'حارس ومسؤول صيانة',
+    farmId: 'farm-2',
+    startDate: '2025-03-01',
+    monthlySalary: 3200,
+    paymentFrequency: 'monthly',
+    status: 'active'
+  },
+  {
+    id: 'wrk-4',
+    name: 'إبراهيم الداودي',
+    phone: '0667445566',
+    nationalId: 'DD987654',
+    jobTitle: 'عامل رعاية وتطهير',
+    farmId: 'farm-3',
+    startDate: '2025-06-01',
+    monthlySalary: 3300,
+    paymentFrequency: 'monthly',
+    status: 'active'
+  }
+];
+
+export const INITIAL_WORKER_TRANSACTIONS: WorkerTransaction[] = [
+  {
+    id: 'wtx-1',
+    workerId: 'wrk-1',
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    date: '2026-05-30',
+    type: 'salary',
+    amount: 4200,
+    accountId: 'acc-caisse-farm1',
+    description: 'أجرة شهر ماي 2026'
+  },
+  {
+    id: 'wtx-2',
+    workerId: 'wrk-1',
+    farmId: 'farm-1',
+    cycleId: 'cycle-3',
+    date: '2026-08-15',
+    type: 'advance_loan',
+    amount: 1000,
+    accountId: 'acc-caisse-main',
+    description: 'سلفة على راتب شهر غشت لعلاج عائلي'
+  },
+  {
+    id: 'wtx-3',
+    workerId: 'wrk-2',
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    date: '2026-06-15',
+    type: 'bonus',
+    amount: 600,
+    accountId: 'acc-caisse-main',
+    description: 'مكافأة تميز في نجاح دورة 2026-01 وقلة نسبة النفوق'
+  }
+];
+
+export const INITIAL_FEED_PURCHASES: FeedPurchase[] = [
+  // Completed Cycle 1 Feeds
+  {
+    id: 'feed-1',
+    invoiceNumber: 'FAC-AG-9021',
+    date: '2026-05-02',
+    supplierId: 'part-sup-1',
+    feedType: 'starter',
+    brand: 'الغرب ستارتر 1',
+    quantityKg: 10000,
+    bagsCount: 200,
+    bagWeightKg: 50,
+    unitPricePerKg: 4.8,
+    totalAmount: 48000,
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    paymentMethod: 'partial',
+    paidAmount: 20000,
+    remainingAmount: 28000,
+    accountId: 'acc-bank-attijari',
+    notes: 'علف بادي 21% بروتين'
+  },
+  {
+    id: 'feed-2',
+    invoiceNumber: 'FAC-AG-9150',
+    date: '2026-05-18',
+    supplierId: 'part-sup-1',
+    feedType: 'grower',
+    brand: 'الغرب كرور 2',
+    quantityKg: 35000,
+    bagsCount: 700,
+    bagWeightKg: 50,
+    unitPricePerKg: 4.5,
+    totalAmount: 157500,
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    paymentMethod: 'bank_transfer',
+    paidAmount: 157500,
+    remainingAmount: 0,
+    accountId: 'acc-bank-attijari'
+  },
+  {
+    id: 'feed-3',
+    invoiceNumber: 'FAC-AG-9290',
+    date: '2026-06-02',
+    supplierId: 'part-sup-1',
+    feedType: 'finisher',
+    brand: 'الغرب فينيسر 3',
+    quantityKg: 22000,
+    bagsCount: 440,
+    bagWeightKg: 50,
+    unitPricePerKg: 4.3,
+    totalAmount: 94600,
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    paymentMethod: 'bank_transfer',
+    paidAmount: 94600,
+    remainingAmount: 0,
+    accountId: 'acc-bank-chaabi'
+  },
+
+  // Active Cycle 2 (Ready for sale)
+  {
+    id: 'feed-4',
+    invoiceNumber: 'FAC-AG-9480',
+    date: '2026-07-16',
+    supplierId: 'part-sup-1',
+    feedType: 'starter',
+    brand: 'الغرب ستارتر',
+    quantityKg: 9000,
+    bagsCount: 180,
+    bagWeightKg: 50,
+    unitPricePerKg: 4.85,
+    totalAmount: 43650,
+    farmId: 'farm-2',
+    cycleId: 'cycle-2',
+    paymentMethod: 'bank_transfer',
+    paidAmount: 43650,
+    remainingAmount: 0,
+    accountId: 'acc-bank-attijari'
+  },
+  {
+    id: 'feed-5',
+    invoiceNumber: 'FAC-AG-9610',
+    date: '2026-08-01',
+    supplierId: 'part-sup-1',
+    feedType: 'grower',
+    brand: 'الغرب كرور',
+    quantityKg: 32000,
+    bagsCount: 640,
+    bagWeightKg: 50,
+    unitPricePerKg: 4.55,
+    totalAmount: 145600,
+    farmId: 'farm-2',
+    cycleId: 'cycle-2',
+    paymentMethod: 'partial',
+    paidAmount: 80000,
+    remainingAmount: 65600,
+    accountId: 'acc-bank-attijari',
+    notes: 'متبقي 65,600 درهم مستحق بتاريخ 10 شتنبر'
+  },
+  {
+    id: 'feed-6',
+    invoiceNumber: 'FAC-AG-9780',
+    date: '2026-08-18',
+    supplierId: 'part-sup-1',
+    feedType: 'finisher',
+    brand: 'الغرب فينيسر',
+    quantityKg: 18000,
+    bagsCount: 360,
+    bagWeightKg: 50,
+    unitPricePerKg: 4.35,
+    totalAmount: 78300,
+    farmId: 'farm-2',
+    cycleId: 'cycle-2',
+    paymentMethod: 'delayed',
+    paidAmount: 0,
+    remainingAmount: 78300,
+    notes: 'مؤجل بالكامل لحين بيع الدورة'
+  },
+
+  // Active Cycle 3 (Day 24)
+  {
+    id: 'feed-7',
+    invoiceNumber: 'FAC-AG-9820',
+    date: '2026-08-07',
+    supplierId: 'part-sup-1',
+    feedType: 'starter',
+    brand: 'الغرب ستارتر بلاس',
+    quantityKg: 12500,
+    bagsCount: 250,
+    bagWeightKg: 50,
+    unitPricePerKg: 4.9,
+    totalAmount: 61250,
+    farmId: 'farm-1',
+    cycleId: 'cycle-3',
+    paymentMethod: 'partial',
+    paidAmount: 30000,
+    remainingAmount: 31250,
+    accountId: 'acc-bank-chaabi'
+  },
+  {
+    id: 'feed-8',
+    invoiceNumber: 'FAC-AG-9910',
+    date: '2026-08-22',
+    supplierId: 'part-sup-1',
+    feedType: 'grower',
+    brand: 'الغرب كرور بريميوم',
+    quantityKg: 25000,
+    bagsCount: 500,
+    bagWeightKg: 50,
+    unitPricePerKg: 4.6,
+    totalAmount: 115000,
+    farmId: 'farm-1',
+    cycleId: 'cycle-3',
+    paymentMethod: 'delayed',
+    paidAmount: 0,
+    remainingAmount: 115000,
+    notes: 'فاتورة علف النمو قيد السداد'
+  }
+];
+
+export const INITIAL_MEDICATION_PURCHASES: MedicationPurchase[] = [
+  {
+    id: 'med-1',
+    date: '2026-05-03',
+    supplierId: 'part-sup-2',
+    medicationName: 'لقاح نيوكاسل + برونشيت (Hitchner B1 + H120)',
+    category: 'vaccine',
+    quantity: 20,
+    unit: 'قنينة 1000 جرعة',
+    unitPrice: 160,
+    totalAmount: 3200,
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    paymentMethod: 'cash',
+    paidAmount: 3200,
+    remainingAmount: 0,
+    accountId: 'acc-caisse-main',
+    dosageInstructions: 'تقطير في العين يوم 7'
+  },
+  {
+    id: 'med-2',
+    date: '2026-05-12',
+    supplierId: 'part-sup-2',
+    medicationName: 'لقاح الغامبورو (Gumboro 228E)',
+    category: 'vaccine',
+    quantity: 20,
+    unit: 'قنينة 1000 جرعة',
+    unitPrice: 190,
+    totalAmount: 3800,
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    paymentMethod: 'cash',
+    paidAmount: 3800,
+    remainingAmount: 0,
+    accountId: 'acc-caisse-main',
+    dosageInstructions: 'في ماء الشرب يوم 14'
+  },
+  {
+    id: 'med-3',
+    date: '2026-05-20',
+    supplierId: 'part-sup-2',
+    medicationName: 'مضاد حيوي تنفسي إنروفلوكساسين 10%',
+    category: 'antibiotic',
+    quantity: 5,
+    unit: 'لتر',
+    unitPrice: 420,
+    totalAmount: 2100,
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    paymentMethod: 'cash',
+    paidAmount: 2100,
+    remainingAmount: 0,
+    accountId: 'acc-caisse-main'
+  },
+  {
+    id: 'med-4',
+    date: '2026-07-16',
+    supplierId: 'part-sup-2',
+    medicationName: 'برنامج تحصينات دورة 2 (نيوكاسل + غامبورو + فيتامينات AD3E)',
+    category: 'vaccine',
+    quantity: 1,
+    unit: 'باقة كاملة',
+    unitPrice: 9800,
+    totalAmount: 9800,
+    farmId: 'farm-2',
+    cycleId: 'cycle-2',
+    paymentMethod: 'partial',
+    paidAmount: 5000,
+    remainingAmount: 4800,
+    accountId: 'acc-caisse-main',
+    notes: 'متبقي 4,800 درهم لمختبرات الأطلس'
+  },
+  {
+    id: 'med-5',
+    date: '2026-08-08',
+    supplierId: 'part-sup-2',
+    medicationName: 'فيتامينات تحضين + مضاد كوكسيديا أمبروليوم',
+    category: 'supplement',
+    quantity: 10,
+    unit: 'كغ/لتر',
+    unitPrice: 350,
+    totalAmount: 3500,
+    farmId: 'farm-1',
+    cycleId: 'cycle-3',
+    paymentMethod: 'cash',
+    paidAmount: 3500,
+    remainingAmount: 0,
+    accountId: 'acc-caisse-farm1'
+  }
+];
+
+export const INITIAL_EXPENSES: Expense[] = [
+  // Chicks Purchases
+  {
+    id: 'exp-1',
+    date: '2026-05-01',
+    category: 'chicks',
+    description: 'شراء 20,000 كتكوت Cobb 500 لدورة 2026-01',
+    amount: 110000,
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    supplierId: 'part-sup-3',
+    paymentMethod: 'bank_transfer',
+    paidAmount: 110000,
+    remainingAmount: 0,
+    accountId: 'acc-bank-attijari'
+  },
+  {
+    id: 'exp-2',
+    date: '2026-07-15',
+    category: 'chicks',
+    description: 'شراء 18,000 كتكوت Ross 308 لدورة 2026-02',
+    amount: 104400,
+    farmId: 'farm-2',
+    cycleId: 'cycle-2',
+    supplierId: 'part-sup-3',
+    paymentMethod: 'partial',
+    paidAmount: 60000,
+    remainingAmount: 44400,
+    accountId: 'acc-bank-attijari',
+    notes: 'متبقي 44,400 درهم لمفرخات الأطلس'
+  },
+  {
+    id: 'exp-3',
+    date: '2026-08-06',
+    category: 'chicks',
+    description: 'شراء 25,000 كتكوت Cobb 500 لدورة 2026-03',
+    amount: 140000,
+    farmId: 'farm-1',
+    cycleId: 'cycle-3',
+    supplierId: 'part-sup-3',
+    paymentMethod: 'partial',
+    paidAmount: 90000,
+    remainingAmount: 50000,
+    accountId: 'acc-bank-attijari',
+    notes: 'متبقي 50,000 درهم'
+  },
+  {
+    id: 'exp-4',
+    date: '2026-08-19',
+    category: 'chicks',
+    description: 'شراء 15,000 كتكوت Hubbard لدورة 2026-04',
+    amount: 81000,
+    farmId: 'farm-3',
+    cycleId: 'cycle-4',
+    supplierId: 'part-sup-3',
+    paymentMethod: 'partial',
+    paidAmount: 45000,
+    remainingAmount: 36000,
+    accountId: 'acc-bank-chaabi'
+  },
+
+  // Gas, Electricity, Disinfection, Transport
+  {
+    id: 'exp-5',
+    date: '2026-05-02',
+    category: 'fuel',
+    description: 'تعبئة قنينات غاز التدفئة للتحضين (دورة 1)',
+    amount: 14500,
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    supplierId: 'part-sup-4',
+    paymentMethod: 'cash',
+    paidAmount: 14500,
+    remainingAmount: 0,
+    accountId: 'acc-caisse-main'
+  },
+  {
+    id: 'exp-6',
+    date: '2026-06-14',
+    category: 'electricity',
+    description: 'فاتورة الكهرباء والتهوية عن دورة 1 (المكتب الوطني ONEE)',
+    amount: 12800,
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    paymentMethod: 'bank_transfer',
+    paidAmount: 12800,
+    remainingAmount: 0,
+    accountId: 'acc-bank-attijari'
+  },
+  {
+    id: 'exp-7',
+    date: '2026-06-15',
+    category: 'cleaning_disinfection',
+    description: 'شراء فرشة نجارة الخشب والتطهير بالفورمول (دورة 1)',
+    amount: 8500,
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    paymentMethod: 'cash',
+    paidAmount: 8500,
+    remainingAmount: 0,
+    accountId: 'acc-caisse-farm1'
+  },
+  {
+    id: 'exp-8',
+    date: '2026-07-20',
+    category: 'fuel',
+    description: 'غاز التدفئة والمحروقات لدورة 2 (مزرعة البركة)',
+    amount: 11200,
+    farmId: 'farm-2',
+    cycleId: 'cycle-2',
+    supplierId: 'part-sup-4',
+    paymentMethod: 'cash',
+    paidAmount: 11200,
+    remainingAmount: 0,
+    accountId: 'acc-caisse-main'
+  },
+  {
+    id: 'exp-9',
+    date: '2026-08-10',
+    category: 'cleaning_disinfection',
+    description: 'شراء 4 أطنان نجارة خشب جديدة لمزرعة النور',
+    amount: 9200,
+    farmId: 'farm-1',
+    cycleId: 'cycle-3',
+    paymentMethod: 'cash',
+    paidAmount: 9200,
+    remainingAmount: 0,
+    accountId: 'acc-caisse-farm1'
+  },
+  {
+    id: 'exp-10',
+    date: '2026-08-25',
+    category: 'maintenance',
+    description: 'صيانة مضخات مياه التبريد وموتورات الشفط',
+    amount: 3400,
+    farmId: 'farm-1',
+    paymentMethod: 'cash',
+    paidAmount: 3400,
+    remainingAmount: 0,
+    accountId: 'acc-caisse-farm1'
+  }
+];
+
+export const INITIAL_SALES: WholesaleSale[] = [
+  // Completed Cycle 1 Sales (Total sold: 19,240 birds, 42,328 kg)
+  {
+    id: 'sale-1',
+    invoiceNumber: 'VTE-2026-001',
+    date: '2026-06-12',
+    customerId: 'part-cust-1',
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    chickenCount: 7500,
+    totalWeightKg: 16500,
+    averageWeightKg: 2.20,
+    pricePerKg: 18.2,
+    grossTotal: 300300,
+    discount: 1300,
+    netTotal: 299000,
+    paidAmount: 200000,
+    remainingAmount: 99000,
+    paymentMethod: 'partial',
+    accountId: 'acc-bank-attijari',
+    truckNumber: '54321-أ-6',
+    driverName: 'سعيد التازي',
+    notes: 'دفعة أولى تحويل بنكي 200,000 درهم'
+  },
+  {
+    id: 'sale-2',
+    invoiceNumber: 'VTE-2026-002',
+    date: '2026-06-13',
+    customerId: 'part-cust-2',
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    chickenCount: 6800,
+    totalWeightKg: 15000,
+    averageWeightKg: 2.205,
+    pricePerKg: 18.5,
+    grossTotal: 277500,
+    discount: 0,
+    netTotal: 277500,
+    paidAmount: 277500,
+    remainingAmount: 0,
+    paymentMethod: 'bank_transfer',
+    accountId: 'acc-bank-attijari',
+    truckNumber: '11223-ب-1',
+    driverName: 'حميد الصالحي',
+    notes: 'شيك مصدق مسدد بالكامل'
+  },
+  {
+    id: 'sale-3',
+    invoiceNumber: 'VTE-2026-003',
+    date: '2026-06-14',
+    customerId: 'part-cust-3',
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    chickenCount: 4940,
+    totalWeightKg: 10828,
+    averageWeightKg: 2.19,
+    pricePerKg: 18.0,
+    grossTotal: 194904,
+    discount: 904,
+    netTotal: 194000,
+    paidAmount: 150000,
+    remainingAmount: 44000,
+    paymentMethod: 'partial',
+    accountId: 'acc-bank-chaabi',
+    truckNumber: '99887-د-15',
+    driverName: 'عمر الهاشمي',
+    notes: 'متبقي 44,000 درهم'
+  },
+
+  // Fresh small batch sale from Cycle 2 test
+  {
+    id: 'sale-4',
+    invoiceNumber: 'VTE-2026-004',
+    date: '2026-08-29',
+    customerId: 'part-cust-4',
+    farmId: 'farm-2',
+    cycleId: 'cycle-2',
+    chickenCount: 2500,
+    totalWeightKg: 5950,
+    averageWeightKg: 2.38,
+    pricePerKg: 19.0,
+    grossTotal: 113050,
+    discount: 1050,
+    netTotal: 112000,
+    paidAmount: 70000,
+    remainingAmount: 42000,
+    paymentMethod: 'partial',
+    accountId: 'acc-bank-attijari',
+    truckNumber: '67890-أ-50',
+    driverName: 'كمال الناصري',
+    notes: 'بيعة أولية لتفريغ العنبر جزئياً، متبقي 42,000 درهم'
+  }
+];
+
+export const INITIAL_TRANSACTIONS: FinancialTransaction[] = [
+  {
+    id: 'tx-1',
+    date: '2026-05-01',
+    type: 'expense',
+    amount: 110000,
+    accountId: 'acc-bank-attijari',
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    partnerId: 'part-sup-3',
+    referenceType: 'expense',
+    referenceId: 'exp-1',
+    paymentMethod: 'bank_transfer',
+    description: 'شراء كتاكيت دورة 1 (20 ألف كتكوت)',
+    performedBy: 'الحاج عثمان الإدريسي',
+    createdAt: '2026-05-01'
+  },
+  {
+    id: 'tx-2',
+    date: '2026-05-02',
+    type: 'supplier_payment',
+    amount: 20000,
+    accountId: 'acc-bank-attijari',
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    partnerId: 'part-sup-1',
+    referenceType: 'feed',
+    referenceId: 'feed-1',
+    paymentMethod: 'bank_transfer',
+    description: 'دفعة لشراء علف بادي دورة 1',
+    performedBy: 'ياسين بنسالم (المحاسب)',
+    createdAt: '2026-05-02'
+  },
+  {
+    id: 'tx-3',
+    date: '2026-06-12',
+    type: 'customer_payment',
+    amount: 200000,
+    accountId: 'acc-bank-attijari',
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    partnerId: 'part-cust-1',
+    referenceType: 'sale',
+    referenceId: 'sale-1',
+    paymentMethod: 'bank_transfer',
+    description: 'تحصيل دفعة أولى من الزبون محمد التاجي (فاتورة VTE-2026-001)',
+    performedBy: 'الحاج عثمان الإدريسي',
+    createdAt: '2026-06-12'
+  },
+  {
+    id: 'tx-4',
+    date: '2026-06-13',
+    type: 'customer_payment',
+    amount: 277500,
+    accountId: 'acc-bank-attijari',
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    partnerId: 'part-cust-2',
+    referenceType: 'sale',
+    referenceId: 'sale-2',
+    paymentMethod: 'bank_transfer',
+    description: 'تحصيل كامل قيمة مبيعات شركة مجازر الأطلس',
+    performedBy: 'ياسين بنسالم (المحاسب)',
+    createdAt: '2026-06-13'
+  },
+  {
+    id: 'tx-5',
+    date: '2026-06-14',
+    type: 'customer_payment',
+    amount: 150000,
+    accountId: 'acc-bank-chaabi',
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    partnerId: 'part-cust-3',
+    referenceType: 'sale',
+    referenceId: 'sale-3',
+    paymentMethod: 'bank_transfer',
+    description: 'تحصيل دفعة من يوسف بوعزة',
+    performedBy: 'ياسين بنسالم',
+    createdAt: '2026-06-14'
+  },
+  {
+    id: 'tx-6',
+    date: '2026-07-10',
+    type: 'customer_payment',
+    amount: 55400,
+    accountId: 'acc-bank-attijari',
+    farmId: 'farm-1',
+    cycleId: 'cycle-1',
+    partnerId: 'part-cust-1',
+    referenceType: 'debt_payment',
+    paymentMethod: 'bank_transfer',
+    description: 'تسديد جزئي من دين محمد التاجي المتبقي',
+    performedBy: 'الحاج عثمان الإدريسي',
+    createdAt: '2026-07-10'
+  },
+  {
+    id: 'tx-7',
+    date: '2026-08-20',
+    type: 'account_transfer',
+    amount: 30000,
+    accountId: 'acc-bank-attijari',
+    targetAccountId: 'acc-caisse-main',
+    paymentMethod: 'cash',
+    description: 'سحب سيولة نقدية من البنك لتغذية الصندوق الرئيسي',
+    performedBy: 'الحاج عثمان الإدريسي',
+    createdAt: '2026-08-20'
+  },
+  {
+    id: 'tx-8',
+    date: '2026-08-29',
+    type: 'customer_payment',
+    amount: 70000,
+    accountId: 'acc-bank-attijari',
+    farmId: 'farm-2',
+    cycleId: 'cycle-2',
+    partnerId: 'part-cust-4',
+    referenceType: 'sale',
+    referenceId: 'sale-4',
+    paymentMethod: 'bank_transfer',
+    description: 'دفعة فورية من بيع 2500 طائر للحاج عبد الله السوسي',
+    performedBy: 'ياسين بنسالم',
+    createdAt: '2026-08-29'
+  }
+];
+
+export const INITIAL_NOTIFICATIONS: AppNotification[] = [
+  {
+    id: 'notif-1',
+    title: 'دورة جاهزة للبيع والتسويق',
+    message: 'دورة 2026-02 في مزرعة البركة بلغت اليوم 39 يوماً بمتوسط وزن 2.38 كغ. الوقت مثالي للبيع بأفضل سعر.',
+    type: 'info',
+    date: '2026-08-30',
+    isRead: false,
+    linkTab: 'cycles',
+    linkId: 'cycle-2'
+  },
+  {
+    id: 'notif-2',
+    title: 'ديون مستحقة للموردين',
+    message: 'شركة أعلاف الغرب المتحدة لديها فواتير مؤجلة مستحقة بقيمة 289,150 درهم.',
+    type: 'warning',
+    date: '2026-08-29',
+    isRead: false,
+    linkTab: 'partners',
+    linkId: 'part-sup-1'
+  },
+  {
+    id: 'notif-3',
+    title: 'مبالغ مستحقة من الزبناء (لي)',
+    message: 'الزبون محمد التاجي متبقي عليه 43,600 درهم والزبون يوسف بوعزة 44,000 درهم.',
+    type: 'warning',
+    date: '2026-08-28',
+    isRead: false,
+    linkTab: 'partners',
+    linkId: 'part-cust-1'
+  },
+  {
+    id: 'notif-4',
+    title: 'تنبيه مخزون العلف',
+    message: 'مخزون علف النمو بمزرعة النور يكفي لحوالي 3 أيام فقط بمعدل الاستهلاك الحالي (2.3 طن/يوم).',
+    type: 'danger',
+    date: '2026-08-30',
+    isRead: false,
+    linkTab: 'feed-meds'
+  }
+];
+
+export const INITIAL_AUDIT_LOGS: AuditLogEntry[] = [
+  {
+    id: 'aud-1',
+    timestamp: '2026-08-29 18:30:15',
+    userId: 'usr-3',
+    userName: 'ياسين بنسالم (المحاسب)',
+    action: 'create',
+    entityType: 'sale',
+    entityId: 'sale-4',
+    details: 'تسجيل فاتورة بيع جديدة VTE-2026-004 للزبون الحاج عبد الله السوسي بقيمة 112,000 درهم (دفعة 70,000 درهم)'
+  },
+  {
+    id: 'aud-2',
+    timestamp: '2026-08-28 11:20:00',
+    userId: 'usr-2',
+    userName: 'رشيد العمراني (مدير مزرعة 1)',
+    action: 'create',
+    entityType: 'daily_log',
+    entityId: 'log-3-22',
+    details: 'تسجيل بيانات يوم 22 لدورة 3: نافق 9 طيور، استهلاك علف 2100 كغ، متوسط وزن 1140 غرام'
+  },
+  {
+    id: 'aud-3',
+    timestamp: '2026-08-20 09:15:42',
+    userId: 'usr-1',
+    userName: 'الحاج عثمان الإدريسي',
+    action: 'update',
+    entityType: 'account_transfer',
+    entityId: 'tx-7',
+    details: 'تحويل سيولة 30,000 درهم من بنك التجاري وفا بنك إلى الصندوق الرئيسي'
+  }
+];

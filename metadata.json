@@ -1,0 +1,6 @@
+{
+  "name": "مزارعنا - إدارة مزارع الدواجن",
+  "description": "تطبيق متكامل واحترافي لإدارة مزارع ودورات تربية الدجاج، الأعلاف والأدوية، المبيعات والذمم المالية، العمال والأرباح التشغيلية الدقيقة",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

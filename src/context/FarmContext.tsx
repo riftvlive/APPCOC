@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useMemo, ReactNo
 import {
   Farm,
   PoultryCycle,
+  ChickPurchase,
   FeedPurchase,
   MedicationPurchase,
   Expense,
@@ -19,7 +20,9 @@ import {
   UserPermissions,
   DEFAULT_ROLE_PERMISSIONS,
   Language,
-  CycleFinancialSummary
+  CycleFinancialSummary,
+  BackupSnapshot,
+  AutoBackupSettings
 } from '../types';
 import { StorageService } from '../services/storageService';
 
@@ -42,6 +45,7 @@ interface FarmContextType {
   accounts: CashAccount[];
   workers: Worker[];
   workerTransactions: WorkerTransaction[];
+  chickPurchases: ChickPurchase[];
   feedPurchases: FeedPurchase[];
   medicationPurchases: MedicationPurchase[];
   expenses: Expense[];
@@ -94,7 +98,10 @@ interface FarmContextType {
   updateWorker: (id: string, worker: Partial<Worker>) => void;
   addWorkerTransaction: (tx: Omit<WorkerTransaction, 'id'>) => void;
 
-  // Quick Action Financial Creators
+  // Quick Action Financial Creators & Purchases
+  addChickPurchase: (purchase: Omit<ChickPurchase, 'id' | 'createdAt'>, createCycleAutomatically?: boolean) => void;
+  updateChickPurchase: (id: string, purchase: Partial<ChickPurchase>) => void;
+  deleteChickPurchase: (id: string) => void;
   addFeedPurchase: (purchase: Omit<FeedPurchase, 'id'>) => void;
   addMedicationPurchase: (purchase: Omit<MedicationPurchase, 'id'>) => void;
   addExpense: (expense: Omit<Expense, 'id'>) => void;
@@ -115,6 +122,18 @@ interface FarmContextType {
   resetAllData: () => void;
   importBackup: (jsonStr: string) => boolean;
   exportBackup: () => string;
+  refreshAll: () => void;
+  syncData: () => void;
+  syncStatus: { isSyncing: boolean; lastSyncTime: string };
+
+  // Auto-Backup & Snapshots
+  backupSnapshots: BackupSnapshot[];
+  autoBackupSettings: AutoBackupSettings;
+  updateAutoBackupSettings: (settings: Partial<AutoBackupSettings>) => void;
+  createManualBackupSnapshot: (description?: string) => BackupSnapshot;
+  restoreBackupSnapshot: (snapshotId: string) => boolean;
+  deleteBackupSnapshot: (snapshotId: string) => void;
+  downloadManualBackup: (format?: 'json' | 'csv_financial' | 'csv_production') => void;
 
   // Role permissions helpers
   canManageFarms: boolean;
@@ -147,6 +166,7 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [accounts, setAccounts] = useState<CashAccount[]>(StorageService.getAccounts());
   const [workers, setWorkers] = useState<Worker[]>(StorageService.getWorkers());
   const [workerTransactions, setWorkerTransactions] = useState<WorkerTransaction[]>(StorageService.getWorkerTransactions());
+  const [chickPurchases, setChickPurchases] = useState<ChickPurchase[]>(StorageService.getChickPurchases());
   const [feedPurchases, setFeedPurchases] = useState<FeedPurchase[]>(StorageService.getFeedPurchases());
   const [medicationPurchases, setMedicationPurchases] = useState<MedicationPurchase[]>(StorageService.getMedicationPurchases());
   const [expenses, setExpenses] = useState<Expense[]>(StorageService.getExpenses());
@@ -154,6 +174,31 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [transactions, setTransactions] = useState<FinancialTransaction[]>(StorageService.getTransactions());
   const [notifications, setNotifications] = useState<AppNotification[]>(StorageService.getNotifications());
   const [auditLogs, setAuditLogs] = useState<AuditLogEntry[]>(StorageService.getAuditLogs());
+  const [backupSnapshots, setBackupSnapshots] = useState<BackupSnapshot[]>(() => StorageService.getBackupSnapshots());
+  const [autoBackupSettings, setAutoBackupSettingsState] = useState<AutoBackupSettings>(() => StorageService.getAutoBackupSettings());
+  const [syncStatus, setSyncStatus] = useState<{ isSyncing: boolean; lastSyncTime: string }>({
+    isSyncing: false,
+    lastSyncTime: 'متصل ومحفوظ'
+  });
+
+  // Background auto-backup scheduler
+  useEffect(() => {
+    // Initial check
+    const initialSnap = StorageService.checkAndRunAutoBackup();
+    if (initialSnap) {
+      setBackupSnapshots(StorageService.getBackupSnapshots());
+    }
+
+    const interval = setInterval(() => {
+      const snap = StorageService.checkAndRunAutoBackup();
+      if (snap) {
+        setBackupSnapshots(StorageService.getBackupSnapshots());
+        setAutoBackupSettingsState(StorageService.getAutoBackupSettings());
+      }
+    }, 45000); // Periodic check every 45s
+
+    return () => clearInterval(interval);
+  }, []);
 
   // Online / Offline listener
   useEffect(() => {
@@ -184,11 +229,11 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const partnerBalances = useMemo(() => {
     return StorageService.calculatePartnerBalances();
-  }, [partners, sales, feedPurchases, medicationPurchases, expenses, transactions]);
+  }, [partners, sales, chickPurchases, feedPurchases, medicationPurchases, expenses, transactions]);
 
   const allCycleSummaries = useMemo(() => {
     return cycles.map(c => StorageService.calculateCycleSummary(c.id));
-  }, [cycles, feedPurchases, medicationPurchases, expenses, sales, dailyLogs, workerTransactions]);
+  }, [cycles, chickPurchases, feedPurchases, medicationPurchases, expenses, sales, dailyLogs, workerTransactions]);
 
   const totalActiveBirds = useMemo(() => {
     return allCycleSummaries
@@ -207,10 +252,11 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const todayExpenses = useMemo(() => {
     const directExp = expenses.filter(e => e.date === todayStr).reduce((sum, e) => sum + e.amount, 0);
+    const chickExp = chickPurchases.filter(c => c.date === todayStr).reduce((sum, c) => sum + c.totalAmount, 0);
     const feedExp = feedPurchases.filter(f => f.date === todayStr).reduce((sum, f) => sum + f.totalAmount, 0);
     const medExp = medicationPurchases.filter(m => m.date === todayStr).reduce((sum, m) => sum + m.totalAmount, 0);
-    return directExp + feedExp + medExp;
-  }, [expenses, feedPurchases, medicationPurchases, todayStr]);
+    return directExp + chickExp + feedExp + medExp;
+  }, [expenses, chickPurchases, feedPurchases, medicationPurchases, todayStr]);
 
   const todayCollections = useMemo(() => {
     return transactions
@@ -591,6 +637,130 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAuditLogs(StorageService.getAuditLogs());
   };
 
+  // Quick Action Financial Creators & Purchases
+  const addChickPurchase = (purchaseData: Omit<ChickPurchase, 'id' | 'createdAt'>, createCycleAutomatically: boolean = false) => {
+    const newChickId = `chk-${Date.now()}`;
+    let linkedCycleId = purchaseData.cycleId;
+
+    // If auto create cycle requested
+    if (createCycleAutomatically && !linkedCycleId) {
+      const newCycleId = `cycle-${Date.now()}`;
+      linkedCycleId = newCycleId;
+      const supplier = partners.find(p => p.id === purchaseData.supplierId);
+      const farm = farms.find(f => f.id === purchaseData.farmId);
+      const expectedSaleDate = new Date(new Date(purchaseData.date).getTime() + 42 * 24 * 60 * 60 * 1000).toISOString().substring(0, 10);
+      
+      const newCycle: PoultryCycle = {
+        id: newCycleId,
+        cycleNumber: `دورة ${purchaseData.breed} (${farm?.name?.split(' ')[0] || 'مزرعة'} - ${purchaseData.date})`,
+        farmId: purchaseData.farmId,
+        barnNumber: purchaseData.hangarName || 'عنبر 1',
+        startDate: purchaseData.date,
+        chickEntryDate: purchaseData.date,
+        expectedSaleDate: expectedSaleDate,
+        chickBreed: purchaseData.breed as any,
+        initialChickCount: purchaseData.receivedHealthyCount,
+        chickUnitPrice: purchaseData.unitPrice,
+        chickSource: supplier?.name || purchaseData.supplierName || 'مفرخات معتمدة',
+        hatcherySupplierId: purchaseData.supplierId,
+        status: 'in_rearing',
+        targetWeightKg: 2.25,
+        notes: `تم إنشاء الدورة تلقائياً من فاتورة شراء الكتاكيت (${purchaseData.invoiceNumber})، استلام ${purchaseData.receivedHealthyCount.toLocaleString('ar-MA')} كتكوت.`,
+        createdAt: new Date().toISOString()
+      };
+      const updatedCycles = [...cycles, newCycle];
+      setCycles(updatedCycles);
+      StorageService.saveCycles(updatedCycles);
+    }
+
+    const newChick: ChickPurchase = {
+      ...purchaseData,
+      id: newChickId,
+      cycleId: linkedCycleId,
+      createdAt: new Date().toISOString()
+    };
+    const updatedChicks = [newChick, ...chickPurchases];
+    setChickPurchases(updatedChicks);
+    StorageService.saveChickPurchases(updatedChicks);
+
+    // If any amount paid immediately, record transaction
+    if (newChick.paidAmount > 0 && newChick.accountId) {
+      const supplier = partners.find(p => p.id === newChick.supplierId);
+      const finTx: FinancialTransaction = {
+        id: `tx-chk-${newChick.id}`,
+        date: newChick.date,
+        type: 'supplier_payment',
+        amount: newChick.paidAmount,
+        accountId: newChick.accountId,
+        farmId: newChick.farmId,
+        cycleId: linkedCycleId,
+        partnerId: newChick.supplierId,
+        referenceType: 'expense',
+        referenceId: newChick.id,
+        paymentMethod: newChick.paymentMethod,
+        description: `دفعة لشراء كتاكيت (${newChick.invoiceNumber}) - المفرخة: ${supplier?.name || newChick.supplierName || 'مفرخات'}`,
+        performedBy: currentUser.name,
+        createdAt: new Date().toISOString()
+      };
+      const updatedTxs = [...transactions, finTx];
+      setTransactions(updatedTxs);
+      StorageService.saveTransactions(updatedTxs);
+    }
+
+    // Add in-app notification
+    const notif: AppNotification = {
+      id: `notif-${Date.now()}`,
+      title: 'استلام دفعة كتاكيت جديدة',
+      message: `تم تسجيل استلام ${newChick.receivedHealthyCount.toLocaleString('ar-MA')} كتكوت (${newChick.breed}) بنجاح.`,
+      type: 'success',
+      date: new Date().toISOString().replace('T', ' ').substring(0, 16),
+      isRead: false,
+      link: 'chicks'
+    };
+    setNotifications(prev => [notif, ...prev]);
+
+    StorageService.logAudit({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      action: 'create',
+      entityType: 'chick_purchase',
+      entityId: newChick.id,
+      details: `شراء واستلام كتاكيت: ${newChick.orderedCount} كتكوت (${newChick.breed})، صافي المستلم ${newChick.receivedHealthyCount} بمبلغ ${newChick.totalAmount} درهم (مدفوع: ${newChick.paidAmount}، مؤجل: ${newChick.remainingAmount})`
+    });
+    setAuditLogs(StorageService.getAuditLogs());
+  };
+
+  const updateChickPurchase = (id: string, purchaseData: Partial<ChickPurchase>) => {
+    const updated = chickPurchases.map(c => c.id === id ? { ...c, ...purchaseData } : c);
+    setChickPurchases(updated);
+    StorageService.saveChickPurchases(updated);
+    StorageService.logAudit({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      action: 'update',
+      entityType: 'chick_purchase',
+      entityId: id,
+      details: `تعديل بيانات شراء الكتاكيت رقم ${purchaseData.invoiceNumber || id}`
+    });
+    setAuditLogs(StorageService.getAuditLogs());
+  };
+
+  const deleteChickPurchase = (id: string) => {
+    const target = chickPurchases.find(c => c.id === id);
+    const updated = chickPurchases.filter(c => c.id !== id);
+    setChickPurchases(updated);
+    StorageService.saveChickPurchases(updated);
+    StorageService.logAudit({
+      userId: currentUser.id,
+      userName: currentUser.name,
+      action: 'delete',
+      entityType: 'chick_purchase',
+      entityId: id,
+      details: `حذف سجل شراء الكتاكيت رقم ${target?.invoiceNumber || id}`
+    });
+    setAuditLogs(StorageService.getAuditLogs());
+  };
+
   // Quick Action Financial Creators
   const addFeedPurchase = (purchaseData: Omit<FeedPurchase, 'id'>) => {
     const newFeed: FeedPurchase = {
@@ -845,8 +1015,7 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     StorageService.saveNotifications(updated);
   };
 
-  const resetAllData = () => {
-    StorageService.resetToDemoData();
+  const refreshAll = () => {
     setUsers(StorageService.getUsers());
     setFarms(StorageService.getFarms());
     setCycles(StorageService.getCycles());
@@ -855,6 +1024,7 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setAccounts(StorageService.getAccounts());
     setWorkers(StorageService.getWorkers());
     setWorkerTransactions(StorageService.getWorkerTransactions());
+    setChickPurchases(StorageService.getChickPurchases());
     setFeedPurchases(StorageService.getFeedPurchases());
     setMedicationPurchases(StorageService.getMedicationPurchases());
     setExpenses(StorageService.getExpenses());
@@ -862,23 +1032,71 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setTransactions(StorageService.getTransactions());
     setNotifications(StorageService.getNotifications());
     setAuditLogs(StorageService.getAuditLogs());
+    setBackupSnapshots(StorageService.getBackupSnapshots());
+    setAutoBackupSettingsState(StorageService.getAutoBackupSettings());
+  };
+
+  const resetAllData = () => {
+    StorageService.resetToDemoData();
+    refreshAll();
+  };
+
+  const syncData = () => {
+    setSyncStatus({ isSyncing: true, lastSyncTime: 'جاري الحفظ والمزامنة...' });
+    setTimeout(() => {
+      StorageService.createBackupSnapshot('auto_interval', 'نسخة مزامنة سحابية وقاعدة بيانات فورية');
+      refreshAll();
+      setSyncStatus({
+        isSyncing: false,
+        lastSyncTime: new Date().toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' })
+      });
+    }, 600);
+  };
+
+  const updateAutoBackupSettings = (newSettings: Partial<AutoBackupSettings>) => {
+    const current = StorageService.getAutoBackupSettings();
+    const updated = { ...current, ...newSettings };
+    StorageService.saveAutoBackupSettings(updated);
+    setAutoBackupSettingsState(updated);
+  };
+
+  const createManualBackupSnapshot = (description?: string): BackupSnapshot => {
+    const snap = StorageService.createBackupSnapshot('manual', description);
+    refreshAll();
+    return snap;
+  };
+
+  const restoreBackupSnapshot = (snapshotId: string): boolean => {
+    const success = StorageService.restoreFromSnapshot(snapshotId);
+    if (success) {
+      refreshAll();
+    }
+    return success;
+  };
+
+  const deleteBackupSnapshot = (snapshotId: string) => {
+    StorageService.deleteSnapshot(snapshotId);
+    setBackupSnapshots(StorageService.getBackupSnapshots());
+  };
+
+  const downloadManualBackup = (format: 'json' | 'csv_financial' | 'csv_production' = 'json') => {
+    if (format === 'json') {
+      const jsonStr = StorageService.exportFullBackup();
+      const blob = new Blob([jsonStr], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `mazariina_full_backup_${new Date().toISOString().substring(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }
   };
 
   const importBackup = (jsonStr: string): boolean => {
     const success = StorageService.importFullBackup(jsonStr);
     if (success) {
-      setFarms(StorageService.getFarms());
-      setCycles(StorageService.getCycles());
-      setDailyLogs(StorageService.getDailyLogs());
-      setPartners(StorageService.getPartners());
-      setAccounts(StorageService.getAccounts());
-      setWorkers(StorageService.getWorkers());
-      setWorkerTransactions(StorageService.getWorkerTransactions());
-      setFeedPurchases(StorageService.getFeedPurchases());
-      setMedicationPurchases(StorageService.getMedicationPurchases());
-      setExpenses(StorageService.getExpenses());
-      setSales(StorageService.getSales());
-      setTransactions(StorageService.getTransactions());
+      refreshAll();
     }
     return success;
   };
@@ -905,6 +1123,7 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         accounts,
         workers,
         workerTransactions,
+        chickPurchases,
         feedPurchases,
         medicationPurchases,
         expenses,
@@ -912,6 +1131,16 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         transactions,
         notifications,
         auditLogs,
+        backupSnapshots,
+        autoBackupSettings,
+        updateAutoBackupSettings,
+        createManualBackupSnapshot,
+        restoreBackupSnapshot,
+        deleteBackupSnapshot,
+        downloadManualBackup,
+        syncStatus,
+        syncData,
+        refreshAll,
         isOnline,
         accountBalances,
         partnerBalances,
@@ -936,6 +1165,9 @@ export const FarmProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         addWorker,
         updateWorker,
         addWorkerTransaction,
+        addChickPurchase,
+        updateChickPurchase,
+        deleteChickPurchase,
         addFeedPurchase,
         addMedicationPurchase,
         addExpense,

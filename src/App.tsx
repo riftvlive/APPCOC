@@ -19,6 +19,7 @@ import { AnalyticsView } from './components/views/AnalyticsView';
 import { ReportsView } from './components/views/ReportsView';
 import { AiAdvisorView } from './components/views/AiAdvisorView';
 import { AuditBackupView } from './components/views/AuditBackupView';
+import { AuditLogView } from './components/views/AuditLogView';
 import { UsersView } from './components/views/UsersView';
 
 const MainApp: React.FC = () => {
@@ -118,6 +119,10 @@ const MainApp: React.FC = () => {
 
           {activeTab === 'users' && (
             <UsersView onNavigate={handleNavigate} />
+          )}
+
+          {(activeTab === 'audit_log' || activeTab === 'audit-log') && (
+            <AuditLogView onNavigate={handleNavigate} />
           )}
 
           {(activeTab === 'audit_backup' || activeTab === 'audit-backup') && (

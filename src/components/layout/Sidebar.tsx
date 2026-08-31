@@ -13,6 +13,7 @@ import {
   FileSpreadsheet,
   Sparkles,
   ShieldCheck,
+  History,
   Plus,
   X
 } from 'lucide-react';
@@ -67,7 +68,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       title: language === 'ar' ? 'الإدارة والأمان' : 'Administration & Sécurité',
       items: [
         { id: 'users', label: language === 'ar' ? 'المستخدمين والصلاحيات' : 'Utilisateurs & Rôles', icon: Users2 },
-        { id: 'audit-backup', label: language === 'ar' ? 'النسخ الاحتياطي والسجلات' : 'Audit & Sauvegarde', icon: ShieldCheck }
+        { id: 'audit-log', label: language === 'ar' ? 'سجل نشاط العمال (Audit)' : 'Journal d’activité', icon: History },
+        { id: 'audit-backup', label: language === 'ar' ? 'النسخ الاحتياطي التلقائي (Backup)' : 'Sauvegardes & Auto-Backup', icon: ShieldCheck }
       ]
     }
   ];

@@ -67,7 +67,7 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenQuickAction }) => {
   return (
     <div className="space-y-5 animate-fade-in pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5 no-print">
         <div>
           <div className="flex items-center gap-2">
             <ShoppingCart className="w-5 h-5 text-emerald-400" />
@@ -82,13 +82,39 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenQuickAction }) => {
           </p>
         </div>
 
-        <button
-          onClick={() => onOpenQuickAction('sale')}
-          className="w-full sm:w-auto px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow flex items-center justify-center gap-1.5 transition"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>{language === 'ar' ? '+ تسجيل بيعة جديدة' : '+ Nouvelle Vente'}</span>
-        </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => window.print()}
+            className="flex-1 sm:flex-none px-3.5 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition"
+            title="طباعة سجل المبيعات"
+          >
+            <Printer className="w-4 h-4 text-amber-400" />
+            <span>طباعة كشف المبيعات</span>
+          </button>
+          <button
+            onClick={() => onOpenQuickAction('sale')}
+            className="flex-1 sm:flex-none px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs rounded-xl shadow flex items-center justify-center gap-1.5 transition"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>{language === 'ar' ? '+ تسجيل بيعة جديدة' : '+ Nouvelle Vente'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Official Print Header */}
+      <div className="print-only border-b-2 border-stone-800 pb-3 mb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-black text-stone-900">سجل وفواتير مبيعات الدجاج بالجملة</h1>
+            <p className="text-xs text-stone-600">
+              نظام إدارة مزارع الدواجن • تاريخ الاستخراج: {new Date().toLocaleDateString('ar-MA')} - {new Date().toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+          <div className="text-left text-xs text-stone-700 font-semibold">
+            <div>إجمالي المبيعات: {totalSalesRevenue.toLocaleString()} {currency}</div>
+            <div>الوزن الإجمالي: {(totalWeightSold / 1000).toFixed(1)} طن</div>
+          </div>
+        </div>
       </div>
 
       {/* KPI Cards */}
@@ -352,6 +378,19 @@ export const SalesView: React.FC<SalesViewProps> = ({ onOpenQuickAction }) => {
           </div>
         </div>
       )}
+      {/* Official Print Footer */}
+      <div className="print-only pt-8 mt-6 border-t-2 border-stone-300">
+        <div className="flex items-center justify-between text-xs text-stone-700">
+          <div>
+            <span className="font-bold block">مسؤول المبيعات والميزان:</span>
+            <div className="h-10 border-b border-dashed border-stone-400 w-48 mt-1"></div>
+          </div>
+          <div>
+            <span className="font-bold block">اعتماد الإدارة والختم:</span>
+            <div className="h-10 border-b border-dashed border-stone-400 w-48 mt-1"></div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

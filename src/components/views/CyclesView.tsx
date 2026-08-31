@@ -16,7 +16,8 @@ import {
   ChevronUp,
   Activity,
   Award,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Printer
 } from 'lucide-react';
 import { useFarm } from '../../context/FarmContext';
 import { PoultryCycle, DailyLog } from '../../types';
@@ -140,7 +141,7 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
   return (
     <div className="space-y-5 animate-fade-in pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5 no-print">
         <div>
           <div className="flex items-center gap-2">
             <Repeat className="w-5 h-5 text-amber-400" />
@@ -155,17 +156,45 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
           </p>
         </div>
 
-        <button
-          onClick={() => setIsAddCycleModal(true)}
-          className="w-full sm:w-auto px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-extrabold text-xs rounded-xl shadow flex items-center justify-center gap-1.5 transition"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>{language === 'ar' ? '+ إطلاق دورة تربية جديدة' : '+ Nouvelle Bande'}</span>
-        </button>
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <button
+            onClick={() => window.print()}
+            className="flex-1 sm:flex-none px-3.5 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition"
+            title="طباعة البطاقة الفنية للدورة"
+          >
+            <Printer className="w-4 h-4 text-amber-400" />
+            <span>طباعة تقرير الدورة</span>
+          </button>
+          <button
+            onClick={() => setIsAddCycleModal(true)}
+            className="flex-1 sm:flex-none px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-extrabold text-xs rounded-xl shadow flex items-center justify-center gap-1.5 transition"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>{language === 'ar' ? '+ إطلاق دورة جديدة' : '+ Nouvelle Bande'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Official Print Header */}
+      <div className="print-only border-b-2 border-stone-800 pb-3 mb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-black text-stone-900">
+              البطاقة الفنية والإنتاجية للدورة: {currentCycleObj?.cycleNumber}
+            </h1>
+            <p className="text-xs text-stone-600">
+              المزرعة: {currentSummary?.farmName} • السلالة: {currentCycleObj?.chickBreed} • تاريخ الاستخراج: {new Date().toLocaleDateString('ar-MA')}
+            </p>
+          </div>
+          <div className="text-left text-xs text-stone-700 font-semibold">
+            <div>حالة الدورة: {currentSummary?.status === 'completed' ? 'مكتملة ومغلقة' : 'جارية في التربية'}</div>
+            <div>العدد الأولي: {currentCycleObj?.initialChickCount.toLocaleString()} كتكوت</div>
+          </div>
+        </div>
       </div>
 
       {/* Cycle Selector Bar */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none">
+      <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none no-print">
         {filteredCycles.map(c => {
           const isSelected = (currentSummary?.cycleId === c.id);
           const isCompleted = c.status === 'completed';
@@ -409,6 +438,20 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
                       )}
                     </tbody>
                   </table>
+                </div>
+              </div>
+            </div>
+
+            {/* Official Print Footer */}
+            <div className="print-only pt-8 mt-6 border-t-2 border-stone-300">
+              <div className="flex items-center justify-between text-xs text-stone-700">
+                <div>
+                  <span className="font-bold block">المشرف البيطري / التقني:</span>
+                  <div className="h-10 border-b border-dashed border-stone-400 w-48 mt-1"></div>
+                </div>
+                <div>
+                  <span className="font-bold block">توقيع مدير المزرعة والختم:</span>
+                  <div className="h-10 border-b border-dashed border-stone-400 w-48 mt-1"></div>
                 </div>
               </div>
             </div>

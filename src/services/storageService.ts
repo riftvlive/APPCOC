@@ -1,6 +1,7 @@
 import {
   Farm,
   PoultryCycle,
+  ChickPurchase,
   FeedPurchase,
   MedicationPurchase,
   Expense,
@@ -14,7 +15,9 @@ import {
   AuditLogEntry,
   AppNotification,
   User,
-  CycleFinancialSummary
+  CycleFinancialSummary,
+  BackupSnapshot,
+  AutoBackupSettings
 } from '../types';
 import {
   INITIAL_USERS,
@@ -25,6 +28,7 @@ import {
   INITIAL_ACCOUNTS,
   INITIAL_WORKERS,
   INITIAL_WORKER_TRANSACTIONS,
+  INITIAL_CHICK_PURCHASES,
   INITIAL_FEED_PURCHASES,
   INITIAL_MEDICATION_PURCHASES,
   INITIAL_EXPENSES,
@@ -43,6 +47,7 @@ const STORAGE_KEYS = {
   ACCOUNTS: 'poultry_erp_accounts_v1',
   WORKERS: 'poultry_erp_workers_v1',
   WORKER_TRANSACTIONS: 'poultry_erp_worker_txs_v1',
+  CHICK_PURCHASES: 'poultry_erp_chick_purchases_v1',
   FEED_PURCHASES: 'poultry_erp_feed_purchases_v1',
   MED_PURCHASES: 'poultry_erp_med_purchases_v1',
   EXPENSES: 'poultry_erp_expenses_v1',
@@ -53,7 +58,17 @@ const STORAGE_KEYS = {
   SYNC_QUEUE: 'poultry_erp_sync_queue_v1',
   CURRENT_USER: 'poultry_erp_current_user_v1',
   LANGUAGE: 'poultry_erp_language_v1',
-  THEME: 'poultry_erp_theme_v1'
+  THEME: 'poultry_erp_theme_v1',
+  AUTO_BACKUP_SETTINGS: 'poultry_erp_auto_backup_settings_v1',
+  BACKUP_SNAPSHOTS: 'poultry_erp_backup_snapshots_v1'
+};
+
+const DEFAULT_AUTO_BACKUP_SETTINGS: AutoBackupSettings = {
+  enabled: true,
+  intervalMinutes: 60,
+  backupOnCriticalAction: true,
+  maxSnapshotsToKeep: 10,
+  lastBackupTimestamp: new Date().toISOString()
 };
 
 export class StorageService {
@@ -133,6 +148,13 @@ export class StorageService {
     this.setItem(STORAGE_KEYS.WORKER_TRANSACTIONS, data);
   }
 
+  static getChickPurchases(): ChickPurchase[] {
+    return this.getItem(STORAGE_KEYS.CHICK_PURCHASES, INITIAL_CHICK_PURCHASES);
+  }
+  static saveChickPurchases(data: ChickPurchase[]): void {
+    this.setItem(STORAGE_KEYS.CHICK_PURCHASES, data);
+  }
+
   static getFeedPurchases(): FeedPurchase[] {
     return this.getItem(STORAGE_KEYS.FEED_PURCHASES, INITIAL_FEED_PURCHASES);
   }
@@ -182,6 +204,110 @@ export class StorageService {
     this.setItem(STORAGE_KEYS.AUDIT_LOGS, data);
   }
 
+  // Auto-Backup Settings & Snapshots
+  static getAutoBackupSettings(): AutoBackupSettings {
+    return this.getItem(STORAGE_KEYS.AUTO_BACKUP_SETTINGS, DEFAULT_AUTO_BACKUP_SETTINGS);
+  }
+  static saveAutoBackupSettings(settings: AutoBackupSettings): void {
+    this.setItem(STORAGE_KEYS.AUTO_BACKUP_SETTINGS, settings);
+  }
+
+  static getBackupSnapshots(): BackupSnapshot[] {
+    return this.getItem<BackupSnapshot[]>(STORAGE_KEYS.BACKUP_SNAPSHOTS, []);
+  }
+  static saveBackupSnapshots(snapshots: BackupSnapshot[]): void {
+    this.setItem(STORAGE_KEYS.BACKUP_SNAPSHOTS, snapshots);
+  }
+
+  static createBackupSnapshot(
+    trigger: 'auto_interval' | 'auto_action' | 'manual' | 'pre_restore' = 'manual',
+    customDescription?: string
+  ): BackupSnapshot {
+    const rawJson = this.exportFullBackup();
+    const farms = this.getFarms();
+    const cycles = this.getCycles();
+    const dailyLogs = this.getDailyLogs();
+    const transactions = this.getTransactions();
+    const sales = this.getSales();
+    const feeds = this.getFeedPurchases();
+    const auditLogs = this.getAuditLogs();
+
+    let desc = customDescription;
+    if (!desc) {
+      if (trigger === 'manual') desc = 'نسخة احتياطية يدوية كاملة';
+      else if (trigger === 'auto_interval') desc = 'نسخة احتياطية تلقائية دورية';
+      else if (trigger === 'auto_action') desc = 'نسخة احتياطية تلقائية بعد تعديل مالي/إنتاجي مهم';
+      else if (trigger === 'pre_restore') desc = 'نسخة أمان تم إنشاؤها تلقائياً قبل الاسترجاع';
+    }
+
+    const newSnapshot: BackupSnapshot = {
+      id: `snap-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+      timestamp: new Date().toISOString(),
+      trigger,
+      description: desc || 'نسخة احتياطية',
+      recordStats: {
+        farms: farms.length,
+        cycles: cycles.length,
+        dailyLogs: dailyLogs.length,
+        transactions: transactions.length,
+        sales: sales.length,
+        feeds: feeds.length,
+        auditLogs: auditLogs.length
+      },
+      sizeBytes: new Blob([rawJson]).size,
+      dataJson: rawJson
+    };
+
+    const settings = this.getAutoBackupSettings();
+    const existing = this.getBackupSnapshots();
+    const maxKeep = settings.maxSnapshotsToKeep || 10;
+    const updated = [newSnapshot, ...existing].slice(0, maxKeep);
+    this.saveBackupSnapshots(updated);
+
+    // Update last backup timestamp
+    this.saveAutoBackupSettings({
+      ...settings,
+      lastBackupTimestamp: newSnapshot.timestamp
+    });
+
+    return newSnapshot;
+  }
+
+  static restoreFromSnapshot(snapshotId: string): boolean {
+    try {
+      const snapshots = this.getBackupSnapshots();
+      const target = snapshots.find(s => s.id === snapshotId);
+      if (!target || !target.dataJson) return false;
+
+      // Save a pre-restore backup first just in case
+      this.createBackupSnapshot('pre_restore', `نسخة أمان قبل استرجاع النسخة المؤرخة في (${new Date(target.timestamp).toLocaleString('ar-MA')})`);
+
+      return this.importFullBackup(target.dataJson);
+    } catch (e) {
+      console.error('Failed to restore snapshot:', e);
+      return false;
+    }
+  }
+
+  static deleteSnapshot(snapshotId: string): void {
+    const snapshots = this.getBackupSnapshots();
+    this.saveBackupSnapshots(snapshots.filter(s => s.id !== snapshotId));
+  }
+
+  static checkAndRunAutoBackup(): BackupSnapshot | null {
+    const settings = this.getAutoBackupSettings();
+    if (!settings.enabled) return null;
+
+    const lastTime = settings.lastBackupTimestamp ? new Date(settings.lastBackupTimestamp).getTime() : 0;
+    const now = Date.now();
+    const intervalMs = (settings.intervalMinutes || 60) * 60 * 1000;
+
+    if (now - lastTime >= intervalMs) {
+      return this.createBackupSnapshot('auto_interval');
+    }
+    return null;
+  }
+
   static logAudit(entry: Omit<AuditLogEntry, 'id' | 'timestamp'>): void {
     const logs = this.getAuditLogs();
     const newEntry: AuditLogEntry = {
@@ -190,6 +316,18 @@ export class StorageService {
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
     this.saveAuditLogs([newEntry, ...logs].slice(0, 500)); // keep last 500
+
+    // Auto-backup on critical actions if enabled
+    const settings = this.getAutoBackupSettings();
+    if (settings.enabled && settings.backupOnCriticalAction) {
+      const isCritical = ['sale', 'transaction', 'daily_log', 'cycle', 'worker_transaction'].includes(entry.entityType || entry.entity || '');
+      if (isCritical) {
+        // Trigger auto backup snapshot in background
+        setTimeout(() => {
+          this.createBackupSnapshot('auto_action', `حفظ تلقائي عند ${entry.action} في ${entry.entityType || entry.entity}`);
+        }, 100);
+      }
+    }
   }
 
   // Backup & Restore
@@ -204,6 +342,7 @@ export class StorageService {
       accounts: this.getAccounts(),
       workers: this.getWorkers(),
       workerTransactions: this.getWorkerTransactions(),
+      chickPurchases: this.getChickPurchases(),
       feedPurchases: this.getFeedPurchases(),
       medicationPurchases: this.getMedicationPurchases(),
       expenses: this.getExpenses(),
@@ -212,6 +351,126 @@ export class StorageService {
       auditLogs: this.getAuditLogs()
     };
     return JSON.stringify(data, null, 2);
+  }
+
+  static exportChickPurchasesCSV(): string {
+    const chicks = this.getChickPurchases();
+    const farms = this.getFarms();
+    const partners = this.getPartners();
+    const cycles = this.getCycles();
+
+    const farmMap = new Map(farms.map(f => [f.id, f.name]));
+    const partMap = new Map(partners.map(p => [p.id, p.name]));
+    const cycleMap = new Map(cycles.map(c => [c.id, c.cycleNumber]));
+
+    const headers = [
+      'المعرف',
+      'رقم الفاتورة',
+      'رقم الشحنة/اللوط',
+      'تاريخ الاستلام',
+      'المفرخة/المورد',
+      'المزرعة',
+      'الدورة',
+      'السلالة',
+      'العدد المطلوب',
+      'نسبة الزيادة %',
+      'عدد الزيادة',
+      'نفوق النقل',
+      'العدد الصافي المسلم حياً',
+      'سعر الكتكوت (DH)',
+      'تكلفة الكتاكيت',
+      'تكلفة النقل',
+      'المبلغ الإجمالي (DH)',
+      'المدفوع (DH)',
+      'المتبقي (DH)',
+      'طريقة الدفع',
+      'متوسط الوزن (غ)',
+      'حرارة الصناديق (°م)',
+      'مؤشر الجودة',
+      'ملاحظات'
+    ];
+
+    const rows = chicks.map(c => [
+      c.id,
+      `"${c.invoiceNumber}"`,
+      `"${c.batchNumber || '-'}"`,
+      c.date,
+      `"${partMap.get(c.supplierId) || c.supplierName || c.supplierId}"`,
+      `"${farmMap.get(c.farmId) || c.farmId}"`,
+      `"${cycleMap.get(c.cycleId || '') || '-'}"`,
+      `"${c.breed}"`,
+      c.orderedCount,
+      c.bonusPercent || 0,
+      c.bonusCount || 0,
+      c.transportMortalityCount || 0,
+      c.receivedHealthyCount,
+      c.unitPrice,
+      c.chickCost,
+      c.transportCost || 0,
+      c.totalAmount,
+      c.paidAmount,
+      c.remainingAmount,
+      c.paymentMethod,
+      c.averageWeightGrams || '-',
+      c.boxTemperatureCelsius || '-',
+      `"${c.qualityScore || 'excellent'}"`,
+      `"${(c.notes || '').replace(/"/g, '""')}"`
+    ]);
+
+    return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  }
+
+  static exportFinancialCSV(): string {
+    const txs = this.getTransactions();
+    const accounts = this.getAccounts();
+    const partners = this.getPartners();
+
+    const accMap = new Map(accounts.map(a => [a.id, a.name]));
+    const partMap = new Map(partners.map(p => [p.id, p.name]));
+
+    const headers = ['المعرف', 'التاريخ', 'النوع', 'الوصف', 'الحساب المالي', 'المبلغ (DH)', 'الطرف/الشريك', 'طريقة الدفع'];
+    const rows = txs.map(t => [
+      t.id,
+      t.date,
+      t.type,
+      `"${(t.description || '').replace(/"/g, '""')}"`,
+      `"${accMap.get(t.accountId) || t.accountId}"`,
+      t.amount,
+      `"${(t.partnerId ? partMap.get(t.partnerId) || t.partnerId : '-')}"`,
+      t.paymentMethod || 'cash'
+    ]);
+
+    return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  }
+
+  static exportProductionCSV(): string {
+    const logs = this.getDailyLogs();
+    const cycles = this.getCycles();
+    const farms = this.getFarms();
+
+    const cycleMap = new Map(cycles.map(c => [c.id, c]));
+    const farmMap = new Map(farms.map(f => [f.id, f.name]));
+
+    const headers = ['المعرف', 'التاريخ', 'المزرعة', 'رقم الدورة', 'عمر الطائر (يوم)', 'النفوق (طائر)', 'العلف المستهلك (كغ)', 'الماء المستهلك (لتر)', 'متوسط الوزن (غ)', 'الحرارة (°م)', 'ملاحظات'];
+    const rows = logs.map(l => {
+      const cycle = cycleMap.get(l.cycleId);
+      const farmName = cycle ? farmMap.get(cycle.farmId) || cycle.farmId : '-';
+      return [
+        l.id,
+        l.date,
+        `"${farmName}"`,
+        cycle?.cycleNumber || '-',
+        l.dayNumber || '-',
+        l.mortalityCount || 0,
+        l.feedConsumedKg || 0,
+        l.waterConsumedLiters || 0,
+        l.sampleAverageWeightGrams || 0,
+        l.temperatureCelsius || '-',
+        `"${(l.notes || '').replace(/"/g, '""')}"`
+      ];
+    });
+
+    return [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
   }
 
   static importFullBackup(jsonString: string): boolean {
@@ -224,6 +483,7 @@ export class StorageService {
       if (data.accounts) this.saveAccounts(data.accounts);
       if (data.workers) this.saveWorkers(data.workers);
       if (data.workerTransactions) this.saveWorkerTransactions(data.workerTransactions);
+      if (data.chickPurchases) this.saveChickPurchases(data.chickPurchases);
       if (data.feedPurchases) this.saveFeedPurchases(data.feedPurchases);
       if (data.medicationPurchases) this.saveMedicationPurchases(data.medicationPurchases);
       if (data.expenses) this.saveExpenses(data.expenses);
@@ -246,6 +506,7 @@ export class StorageService {
     this.saveAccounts(INITIAL_ACCOUNTS);
     this.saveWorkers(INITIAL_WORKERS);
     this.saveWorkerTransactions(INITIAL_WORKER_TRANSACTIONS);
+    this.saveChickPurchases(INITIAL_CHICK_PURCHASES);
     this.saveFeedPurchases(INITIAL_FEED_PURCHASES);
     this.saveMedicationPurchases(INITIAL_MEDICATION_PURCHASES);
     this.saveExpenses(INITIAL_EXPENSES);
@@ -291,6 +552,7 @@ export class StorageService {
   } {
     const partners = this.getPartners();
     const sales = this.getSales();
+    const chicks = this.getChickPurchases();
     const feeds = this.getFeedPurchases();
     const meds = this.getMedicationPurchases();
     const expenses = this.getExpenses();
@@ -324,6 +586,16 @@ export class StorageService {
         customerMap[t.partnerId!].totalPaid += t.amount;
         customerMap[t.partnerId!].remainingDue -= t.amount;
       }
+    });
+
+    // Chick purchases from hatcheries/suppliers
+    chicks.forEach(c => {
+      if (!supplierMap[c.supplierId]) {
+        supplierMap[c.supplierId] = { totalPurchases: 0, totalPaid: 0, remainingDebt: 0 };
+      }
+      supplierMap[c.supplierId].totalPurchases += c.totalAmount;
+      supplierMap[c.supplierId].totalPaid += c.paidAmount;
+      supplierMap[c.supplierId].remainingDebt += c.remainingAmount;
     });
 
     // Feed purchases from suppliers

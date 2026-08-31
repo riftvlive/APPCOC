@@ -27,7 +27,8 @@ import {
   User as UserIcon,
   Check,
   HelpCircle,
-  Sliders
+  Sliders,
+  History
 } from 'lucide-react';
 import { useFarm } from '../../context/FarmContext';
 import { User, UserRole, UserPermissions, DEFAULT_ROLE_PERMISSIONS } from '../../types';
@@ -266,6 +267,17 @@ export const UsersView: React.FC<UsersViewProps> = ({ onNavigate }) => {
           </div>
 
           <div className="flex items-center gap-2.5 flex-wrap">
+            {onNavigate && (
+              <button
+                onClick={() => onNavigate('audit_log')}
+                className="px-3.5 py-2.5 bg-stone-800 hover:bg-stone-700 text-amber-300 text-xs font-bold rounded-xl border border-stone-700 flex items-center gap-1.5 transition"
+                title="عرض سجل تدقيق العمليات"
+              >
+                <History className="w-4 h-4 text-amber-400" />
+                <span>سجل النشاط اليومي للعمال</span>
+              </button>
+            )}
+
             <button
               onClick={() => setShowRoleGuide(!showRoleGuide)}
               className="px-3.5 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs font-bold rounded-xl border border-stone-700 flex items-center gap-1.5 transition"

@@ -244,7 +244,64 @@ export const ReportsView: React.FC = () => {
           </div>
         )}
 
-        {/* Report 2: Debts Aging Report */}
+        {/* Report 2: Cycles Detailed Cost Sheet */}
+        {reportType === 'cycles_cost' && (
+          <div className="space-y-4">
+            <table className="w-full text-right text-xs">
+              <thead className="bg-stone-100 text-stone-800">
+                <tr>
+                  <th className="p-2.5 font-bold">الدورة والمزرعة</th>
+                  <th className="p-2.5 font-bold">السلالة والعدد</th>
+                  <th className="p-2.5 font-bold">كلفة الكتاكيت</th>
+                  <th className="p-2.5 font-bold">كمية العلف (كغ)</th>
+                  <th className="p-2.5 font-bold">كلفة العلف</th>
+                  <th className="p-2.5 font-bold">الأدوية والبيطرة</th>
+                  <th className="p-2.5 font-bold">المصاريف الأخرى</th>
+                  <th className="p-2.5 font-bold">إجمالي التكلفة</th>
+                  <th className="p-2.5 font-bold">كلفة الكغ الحي</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y text-stone-800">
+                {allCycleSummaries.map(s => {
+                  const cyc = cycles.find(c => c.id === s.cycleId);
+                  return (
+                    <tr key={s.cycleId} className="hover:bg-stone-50">
+                      <td className="p-2.5 font-bold">
+                        {s.cycleNumber} <span className="text-stone-500 font-normal">({s.farmName})</span>
+                      </td>
+                      <td className="p-2.5 font-semibold">
+                        {cyc?.chickBreed || 'Ross 308'} ({s.initialChicksCount.toLocaleString()} طائر)
+                      </td>
+                      <td className="p-2.5">{s.chicksCost.toLocaleString()} {currency}</td>
+                      <td className="p-2.5 font-medium">{s.totalFeedConsumedKg.toLocaleString()} كغ</td>
+                      <td className="p-2.5 font-semibold">{s.totalFeedCost.toLocaleString()} {currency}</td>
+                      <td className="p-2.5">{s.totalMedicationCost.toLocaleString()} {currency}</td>
+                      <td className="p-2.5">{(s.totalLaborCost + s.totalUtilitiesCost).toLocaleString()} {currency}</td>
+                      <td className="p-2.5 font-black text-rose-700">{s.totalCycleCost.toLocaleString()} {currency}</td>
+                      <td className="p-2.5 font-black text-amber-700 bg-amber-50/50">{s.costPerKg.toFixed(2)} {currency}/كغ</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot className="bg-stone-100 font-black text-stone-900 border-t-2 border-stone-300">
+                <tr>
+                  <td className="p-2.5" colSpan={2}>المجاميع والمتوسطات العامة:</td>
+                  <td className="p-2.5">{allCycleSummaries.reduce((sum, s) => sum + s.chicksCost, 0).toLocaleString()} {currency}</td>
+                  <td className="p-2.5">{allCycleSummaries.reduce((sum, s) => sum + s.totalFeedConsumedKg, 0).toLocaleString()} كغ</td>
+                  <td className="p-2.5">{allCycleSummaries.reduce((sum, s) => sum + s.totalFeedCost, 0).toLocaleString()} {currency}</td>
+                  <td className="p-2.5">{allCycleSummaries.reduce((sum, s) => sum + s.totalMedicationCost, 0).toLocaleString()} {currency}</td>
+                  <td className="p-2.5">{allCycleSummaries.reduce((sum, s) => sum + s.totalLaborCost + s.totalUtilitiesCost, 0).toLocaleString()} {currency}</td>
+                  <td className="p-2.5 text-rose-800">{allCycleSummaries.reduce((sum, s) => sum + s.totalCycleCost, 0).toLocaleString()} {currency}</td>
+                  <td className="p-2.5 text-amber-800">
+                    {(allCycleSummaries.reduce((sum, s) => sum + s.costPerKg, 0) / (allCycleSummaries.length || 1)).toFixed(2)} {currency}/كغ
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+
+        {/* Report 3: Debts Aging Report */}
         {reportType === 'debts' && (
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4">

@@ -111,6 +111,16 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSearch, activeTab, setActi
             <span>{isOnline ? (language === 'ar' ? 'متصل' : 'En ligne') : (language === 'ar' ? 'أوفلاين' : 'Hors ligne')}</span>
           </div>
 
+          {/* Auto Backup Vault Quick Chip */}
+          <button
+            onClick={() => setActiveTab('audit_backup')}
+            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border bg-stone-800/80 hover:bg-stone-700 text-stone-300 border-stone-700 cursor-pointer transition"
+            title="النسخ الاحتياطي التلقائي وقواعد البيانات"
+          >
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[10px] text-stone-300">النسخ التلقائي: نشط</span>
+          </button>
+
           {/* Universal Search Button */}
           <button
             id="header-search-btn"

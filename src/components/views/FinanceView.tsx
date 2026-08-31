@@ -12,6 +12,7 @@ import {
   CheckCircle2,
   AlertCircle,
   FileText,
+  Printer,
   X
 } from 'lucide-react';
 import { useFarm } from '../../context/FarmContext';
@@ -85,7 +86,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({ onOpenQuickAction, def
   return (
     <div className="space-y-5 animate-fade-in pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5 no-print">
         <div>
           <div className="flex items-center gap-2">
             <DollarSign className="w-5 h-5 text-amber-400" />
@@ -102,6 +103,14 @@ export const FinanceView: React.FC<FinanceViewProps> = ({ onOpenQuickAction, def
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
+            onClick={() => window.print()}
+            className="flex-1 sm:flex-none px-3.5 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition"
+            title="طباعة التقرير المالي"
+          >
+            <Printer className="w-4 h-4 text-amber-400" />
+            <span>طباعة التقرير المالي</span>
+          </button>
+          <button
             onClick={() => setIsTransferModalOpen(true)}
             className="flex-1 sm:flex-none px-3.5 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition"
           >
@@ -115,6 +124,22 @@ export const FinanceView: React.FC<FinanceViewProps> = ({ onOpenQuickAction, def
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>+ تسجيل حركة</span>
           </button>
+        </div>
+      </div>
+
+      {/* Official Print Header (Visible only when printed) */}
+      <div className="print-only border-b-2 border-stone-800 pb-3 mb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-black text-stone-900">تقرير الخزينة المركزية والموقف المالي</h1>
+            <p className="text-xs text-stone-600">
+              نظام إدارة مزارع الدواجن • تاريخ الاستخراج: {new Date().toLocaleDateString('ar-MA')} - {new Date().toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+          <div className="text-left text-xs text-stone-700 font-semibold">
+            <div>العملة المعتمدة: {currency}</div>
+            <div>الحالة: كشف حساب مالي رسمي</div>
+          </div>
         </div>
       </div>
 
@@ -548,6 +573,19 @@ export const FinanceView: React.FC<FinanceViewProps> = ({ onOpenQuickAction, def
           </div>
         </div>
       )}
+      {/* Official Print Footer */}
+      <div className="print-only pt-8 mt-6 border-t-2 border-stone-300">
+        <div className="flex items-center justify-between text-xs text-stone-700">
+          <div>
+            <span className="font-bold block">إعداد ومصادقة المحاسب:</span>
+            <div className="h-10 border-b border-dashed border-stone-400 w-48 mt-1"></div>
+          </div>
+          <div>
+            <span className="font-bold block">اعتماد الإدارة العامة والختم:</span>
+            <div className="h-10 border-b border-dashed border-stone-400 w-48 mt-1"></div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

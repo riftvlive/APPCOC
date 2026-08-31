@@ -176,6 +176,45 @@ export interface PoultryCycle {
   createdAt?: string;
 }
 
+export interface ChickPurchase {
+  id: string;
+  invoiceNumber: string;
+  batchNumber?: string;
+  date: string;
+  supplierId: string;
+  supplierName?: string;
+  breed: string; // e.g. 'Ross 308' | 'Cobb 500' | 'Hubbard Classic' | 'Sasso' | 'ISA Brown' | 'بلدي محسن'
+  chickType?: 'broiler' | 'layer' | 'sasso' | 'baladi' | string;
+  farmId: string;
+  hangarName?: string;
+  cycleId?: string;
+  orderedCount: number;
+  bonusPercent?: number; // e.g. 2%
+  bonusCount?: number; // e.g. 400
+  transportMortalityCount: number; // e.g. 35
+  receivedHealthyCount: number; // ordered + bonus - transportMortality
+  unitPrice: number; // e.g. 5.80 DH
+  chickCost: number; // orderedCount * unitPrice
+  transportCost?: number;
+  vaccineCostAtHatchery?: number;
+  totalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentMethod: PaymentMethod;
+  accountId?: string;
+  truckPlate?: string;
+  driverName?: string;
+  driverPhone?: string;
+  receptionTime?: string;
+  boxTemperatureCelsius?: number;
+  averageWeightGrams?: number; // e.g. 42g
+  uniformityPercent?: number; // e.g. 85%
+  hatcheryVaccines?: string[]; // e.g. ['ماريك (Marek)', 'نيوكاسل (ND)', 'التهاب شعبي (IB)', 'جمبورو (IBD)']
+  qualityScore?: 'excellent' | 'good' | 'acceptable' | 'poor';
+  notes?: string;
+  createdAt?: string;
+}
+
 export interface FeedPurchase {
   id: string;
   invoiceNumber?: string;
@@ -417,4 +456,30 @@ export interface PartnerBalancesOverview {
   supplierPayables: Record<string, { totalPayable: number; paidAmount: number; remainingDebt: number }>;
   totalReceivables: number;
   totalPayables: number;
+}
+
+export interface BackupSnapshot {
+  id: string;
+  timestamp: string;
+  trigger: 'auto_interval' | 'auto_action' | 'manual' | 'pre_restore';
+  description: string;
+  recordStats: {
+    farms: number;
+    cycles: number;
+    dailyLogs: number;
+    transactions: number;
+    sales: number;
+    feeds: number;
+    auditLogs: number;
+  };
+  sizeBytes: number;
+  dataJson: string;
+}
+
+export interface AutoBackupSettings {
+  enabled: boolean;
+  intervalMinutes: number; // e.g., 30, 60, 360, 1440
+  backupOnCriticalAction: boolean;
+  maxSnapshotsToKeep: number;
+  lastBackupTimestamp?: string;
 }

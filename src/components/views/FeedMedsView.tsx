@@ -9,7 +9,8 @@ import {
   Building2,
   FileText,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Printer
 } from 'lucide-react';
 import { useFarm } from '../../context/FarmContext';
 
@@ -46,7 +47,7 @@ export const FeedMedsView: React.FC<FeedMedsViewProps> = ({ onOpenQuickAction })
   return (
     <div className="space-y-5 animate-fade-in pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5 no-print">
         <div>
           <div className="flex items-center gap-2">
             <Wheat className="w-5 h-5 text-amber-400" />
@@ -63,6 +64,14 @@ export const FeedMedsView: React.FC<FeedMedsViewProps> = ({ onOpenQuickAction })
 
         <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
+            onClick={() => window.print()}
+            className="flex-1 sm:flex-none px-3.5 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition"
+            title="طباعة تقرير المشتريات والمخزون"
+          >
+            <Printer className="w-4 h-4 text-amber-400" />
+            <span>طباعة التقرير</span>
+          </button>
+          <button
             onClick={() => onOpenQuickAction('feed')}
             className="flex-1 sm:flex-none px-3.5 py-2.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-extrabold text-xs rounded-xl shadow flex items-center justify-center gap-1.5 transition"
           >
@@ -74,8 +83,26 @@ export const FeedMedsView: React.FC<FeedMedsViewProps> = ({ onOpenQuickAction })
             className="flex-1 sm:flex-none px-3.5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl shadow flex items-center justify-center gap-1.5 transition"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>+ شراء دواء/لقاح</span>
+            <span>+ شراء دواء</span>
           </button>
+        </div>
+      </div>
+
+      {/* Official Print Header */}
+      <div className="print-only border-b-2 border-stone-800 pb-3 mb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-black text-stone-900">
+              تقرير مشتريات واستهلاك الأعلاف والأدوية البيطرية
+            </h1>
+            <p className="text-xs text-stone-600">
+              نظام إدارة مزارع الدواجن • تاريخ الاستخراج: {new Date().toLocaleDateString('ar-MA')} - {new Date().toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+          <div className="text-left text-xs text-stone-700 font-semibold">
+            <div>إجمالي كمية العلف: {(totalFeedKg / 1000).toFixed(1)} طن ({totalFeedCost.toLocaleString()} {currency})</div>
+            <div>إجمالي الأدوية واللقاحات: {totalMedCost.toLocaleString()} {currency}</div>
+          </div>
         </div>
       </div>
 
@@ -279,6 +306,19 @@ export const FeedMedsView: React.FC<FeedMedsViewProps> = ({ onOpenQuickAction })
           </div>
         </div>
       )}
+      {/* Official Print Footer */}
+      <div className="print-only pt-8 mt-6 border-t-2 border-stone-300">
+        <div className="flex items-center justify-between text-xs text-stone-700">
+          <div>
+            <span className="font-bold block">أمين المخزن والتموين:</span>
+            <div className="h-10 border-b border-dashed border-stone-400 w-48 mt-1"></div>
+          </div>
+          <div>
+            <span className="font-bold block">مصادقة الإدارة العامة:</span>
+            <div className="h-10 border-b border-dashed border-stone-400 w-48 mt-1"></div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };

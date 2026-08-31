@@ -9,7 +9,8 @@ import {
   Flame,
   Wheat,
   Percent,
-  CheckCircle2
+  CheckCircle2,
+  Printer
 } from 'lucide-react';
 import { useFarm } from '../../context/FarmContext';
 
@@ -48,7 +49,7 @@ export const AnalyticsView: React.FC = () => {
   return (
     <div className="space-y-5 animate-fade-in pb-12">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5">
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5 no-print">
         <div>
           <div className="flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-amber-400" />
@@ -63,22 +64,49 @@ export const AnalyticsView: React.FC = () => {
           </p>
         </div>
 
-        {/* Breed filter */}
-        <div className="flex items-center gap-1.5 bg-stone-950/60 p-1 rounded-xl border border-stone-800">
-          <span className="text-[11px] text-stone-400 px-2 font-bold">السلالة:</span>
-          {(['all', 'Ross 308', 'Cobb 500', 'Hubbard'] as const).map(b => (
-            <button
-              key={b}
-              onClick={() => setSelectedBreedFilter(b)}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                selectedBreedFilter === b
-                  ? 'bg-amber-500 text-stone-950'
-                  : 'text-stone-400 hover:text-stone-200'
-              }`}
-            >
-              {b === 'all' ? 'الكل' : b}
-            </button>
-          ))}
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          {/* Breed filter */}
+          <div className="flex items-center gap-1.5 bg-stone-950/60 p-1 rounded-xl border border-stone-800">
+            <span className="text-[11px] text-stone-400 px-2 font-bold">السلالة:</span>
+            {(['all', 'Ross 308', 'Cobb 500', 'Hubbard'] as const).map(b => (
+              <button
+                key={b}
+                onClick={() => setSelectedBreedFilter(b)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                  selectedBreedFilter === b
+                    ? 'bg-amber-500 text-stone-950'
+                    : 'text-stone-400 hover:text-stone-200'
+                }`}
+              >
+                {b === 'all' ? 'الكل' : b}
+              </button>
+            ))}
+          </div>
+
+          <button
+            onClick={() => window.print()}
+            className="px-3.5 py-2 bg-amber-500 hover:bg-amber-400 text-stone-950 font-extrabold text-xs rounded-xl shadow flex items-center justify-center gap-1.5 transition"
+            title="طباعة التقرير الفني والإنتاجي"
+          >
+            <Printer className="w-4 h-4 stroke-[2.5]" />
+            <span>طباعة التقرير الفني</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Official Print Header */}
+      <div className="print-only border-b-2 border-stone-800 pb-3 mb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-black text-stone-900">تقرير المؤشرات الفنية والإنتاجية ومقارنة السلالات</h1>
+            <p className="text-xs text-stone-600">
+              نظام إدارة مزارع الدواجن • تاريخ الاستخراج: {new Date().toLocaleDateString('ar-MA')} - {new Date().toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' })}
+            </p>
+          </div>
+          <div className="text-left text-xs text-stone-700 font-semibold">
+            <div>فلتر السلالة: {selectedBreedFilter === 'all' ? 'جميع السلالات' : selectedBreedFilter}</div>
+            <div>العملة: {currency}</div>
+          </div>
         </div>
       </div>
 
@@ -224,6 +252,19 @@ export const AnalyticsView: React.FC = () => {
             <p className="text-stone-400 text-[11px]">
               يمثل العلف 60-65% من كلفة الدجاجة، الكتاكيت 18-22%، والبيطرة والطاقة والعمالة 15-20%.
             </p>
+          </div>
+        </div>
+      </div>
+      {/* Official Print Footer */}
+      <div className="print-only pt-8 mt-6 border-t-2 border-stone-300">
+        <div className="flex items-center justify-between text-xs text-stone-700">
+          <div>
+            <span className="font-bold block">المشرف الفني / المهندس الزراعي:</span>
+            <div className="h-10 border-b border-dashed border-stone-400 w-48 mt-1"></div>
+          </div>
+          <div>
+            <span className="font-bold block">اعتماد مدير الإنتاج والختم:</span>
+            <div className="h-10 border-b border-dashed border-stone-400 w-48 mt-1"></div>
           </div>
         </div>
       </div>

@@ -24,6 +24,7 @@ import {
   Info
 } from 'lucide-react';
 import { useFarm } from '../../context/FarmContext';
+import { getMoroccoDateISO } from '../../utils/date';
 import { StorageService } from '../../services/storageService';
 import { BackupSnapshot } from '../../types';
 
@@ -56,7 +57,6 @@ export const AuditBackupView: React.FC<AuditBackupViewProps> = ({ onNavigate }) 
   });
   const [manualDescription, setManualDescription] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const showNotify = (text: string, type: 'success' | 'error' | 'info' = 'success') => {
@@ -71,7 +71,7 @@ export const AuditBackupView: React.FC<AuditBackupViewProps> = ({ onNavigate }) 
       const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
-      const dateStr = new Date().toISOString().substring(0, 10);
+      const dateStr = getMoroccoDateISO();
       link.href = url;
       link.setAttribute('download', `mazariina_poultry_full_backup_${dateStr}.json`);
       document.body.appendChild(link);
@@ -92,7 +92,7 @@ export const AuditBackupView: React.FC<AuditBackupViewProps> = ({ onNavigate }) 
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `mazariina_financial_records_${new Date().toISOString().substring(0, 10)}.csv`);
+      link.setAttribute('download', `mazariina_financial_records_${getMoroccoDateISO()}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -111,7 +111,7 @@ export const AuditBackupView: React.FC<AuditBackupViewProps> = ({ onNavigate }) 
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `mazariina_production_daily_logs_${new Date().toISOString().substring(0, 10)}.csv`);
+      link.setAttribute('download', `mazariina_production_daily_logs_${getMoroccoDateISO()}.csv`);
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -208,15 +208,6 @@ export const AuditBackupView: React.FC<AuditBackupViewProps> = ({ onNavigate }) 
         }
       };
     }
-  };
-
-  // 8. Factory Reset
-  const handleExecuteReset = () => {
-    StorageService.createBackupSnapshot('pre_restore', 'نسخة أمان تلقائية قبل إعادة ضبط المصنع الافتراضي');
-    StorageService.resetToDemoData();
-    refreshAll();
-    setShowResetConfirmModal(false);
-    showNotify('تمت إعادة ضبط البيانات إلى النموذج الافتراضي، وتم حفظ نسخة أمان احتياطية تلقائياً.');
   };
 
   return (
@@ -740,27 +731,6 @@ export const AuditBackupView: React.FC<AuditBackupViewProps> = ({ onNavigate }) 
         )}
       </div>
 
-      {/* Danger Zone: Factory Reset */}
-      <div className="bg-rose-950/20 border border-rose-900/40 rounded-3xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="w-5 h-5 text-rose-400" />
-            <h4 className="text-xs font-black text-rose-200">إعادة ضبط البيانات للنموذج التجريبي الافتراضي</h4>
-          </div>
-          <p className="text-[11px] text-stone-400 mt-1">
-            سيتم مسح البيانات الحالية واستبدالها بنموذج تجريبي جديد. يقوم النظام تلقائياً بحفظ نسخة أمان قبل إعادة الضبط.
-          </p>
-        </div>
-
-        <button
-          onClick={() => setShowResetConfirmModal(true)}
-          className="px-4 py-2.5 bg-rose-900/40 hover:bg-rose-900/80 text-rose-200 border border-rose-800/60 rounded-xl text-xs font-black transition shrink-0 flex items-center gap-1.5"
-        >
-          <Trash2 className="w-4 h-4 text-rose-400" />
-          <span>إعادة ضبط المصنع</span>
-        </button>
-      </div>
-
       {/* Create Manual Snapshot Modal */}
       {showCreateModal && (
         <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
@@ -857,39 +827,6 @@ export const AuditBackupView: React.FC<AuditBackupViewProps> = ({ onNavigate }) 
         </div>
       )}
 
-      {/* Reset to Demo Modal */}
-      {showResetConfirmModal && (
-        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
-          <div className="bg-stone-900 border border-rose-800 rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center gap-2 text-rose-400 border-b border-stone-800 pb-3">
-              <AlertTriangle className="w-5 h-5" />
-              <h3 className="text-sm font-black text-stone-100">تأكيد إعادة ضبط النموذج الافتراضي</h3>
-            </div>
-
-            <p className="text-xs text-rose-300 leading-relaxed font-semibold">
-              تحذير: هذا الإجراء سيعيد تعيين كافة السجلات إلى الحالة التجريبية الأولى.
-            </p>
-            <p className="text-[11px] text-stone-400">
-              سيقوم النظام بإنشاء نسخة أمان تلقائية قبل التنفيذ يمكنك الرجوع إليها لاحقاً من جدول الاسترجاع.
-            </p>
-
-            <div className="flex items-center gap-2.5 pt-2">
-              <button
-                onClick={handleExecuteReset}
-                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white font-black rounded-xl text-xs transition shadow-lg"
-              >
-                نعم، إعادة الضبط
-              </button>
-              <button
-                onClick={() => setShowResetConfirmModal(false)}
-                className="px-4 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-300 font-bold rounded-xl text-xs transition"
-              >
-                إلغاء
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

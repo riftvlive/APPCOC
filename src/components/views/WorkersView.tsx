@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useFarm } from '../../context/FarmContext';
 import { Worker } from '../../types';
+import { getMoroccoDateISO } from '../../utils/date';
 
 interface WorkersViewProps {
   onOpenQuickAction: (action?: string) => void;
@@ -21,6 +22,7 @@ interface WorkersViewProps {
 export const WorkersView: React.FC<WorkersViewProps> = ({ onOpenQuickAction }) => {
   const {
     workers,
+    users,
     workerTransactions,
     farms,
     accounts,
@@ -33,9 +35,10 @@ export const WorkersView: React.FC<WorkersViewProps> = ({ onOpenQuickAction }) =
   } = useFarm();
 
   const [selectedWorkerDetail, setSelectedWorkerDetail] = useState<Worker | null>(null);
+  const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
   const [isAddWorkerModal, setIsAddWorkerModal] = useState(false);
   const [payModalWorker, setPayModalWorker] = useState<Worker | null>(null);
-  const [payType, setPayType] = useState<'salary' | 'advance_loan' | 'bonus'>('salary');
+  const [payType, setPayType] = useState<'salary' | 'advance_loan' | 'bonus' | 'deduction'>('salary');
   const [payAmount, setPayAmount] = useState<number | ''>('');
   const [payAccountId, setPayAccountId] = useState(accounts[0]?.id || '');
   const [payDescription, setPayDescription] = useState('');
@@ -46,31 +49,51 @@ export const WorkersView: React.FC<WorkersViewProps> = ({ onOpenQuickAction }) =
   const [phone, setPhone] = useState('');
   const [monthlySalary, setMonthlySalary] = useState<number | ''>(3500);
   const [farmId, setFarmId] = useState(farms[0]?.id || '');
+  const [userId, setUserId] = useState('');
 
   const filteredWorkers = selectedFarmId === 'all'
     ? workers
     : workers.filter(w => w.farmId === selectedFarmId);
 
   const totalMonthlyPayroll = filteredWorkers.reduce((sum, w) => sum + w.monthlySalary, 0);
+  const currentMonth = getMoroccoDateISO().slice(0, 7);
+  const getWorkerLedger = (workerId: string) => {
+    const history = workerTransactions.filter(t => t.workerId === workerId);
+    const advances = history.filter(t => t.type === 'advance_loan').reduce((sum, t) => sum + t.amount, 0);
+    const deductions = history.filter(t => t.type === 'deduction').reduce((sum, t) => sum + t.amount, 0);
+    const paidThisMonth = history
+      .filter(t => t.date.startsWith(currentMonth) && ['salary', 'bonus'].includes(t.type))
+      .reduce((sum, t) => sum + t.amount, 0);
+    return { outstandingAdvance: Math.max(0, advances - deductions), paidThisMonth };
+  };
+  const totalPaidThisMonth = filteredWorkers.reduce((sum, worker) => sum + getWorkerLedger(worker.id).paidThisMonth, 0);
+  const totalOutstandingAdvances = filteredWorkers.reduce((sum, worker) => sum + getWorkerLedger(worker.id).outstandingAdvance, 0);
 
   const handleSaveWorker = (e: React.FormEvent) => {
     e.preventDefault();
     if (!name || !monthlySalary) return;
 
-    addWorker({
-      name,
-      jobTitle,
-      phone,
-      monthlySalary: Number(monthlySalary),
-      farmId,
-      hireDate: new Date().toISOString().substring(0, 10),
-      isActive: true,
-      currentBalance: 0
-    });
+    if (editingWorker) {
+      updateWorker(editingWorker.id, { name, jobTitle, phone, monthlySalary: Number(monthlySalary), farmId });
+    } else {
+      addWorker({ name, jobTitle, phone, monthlySalary: Number(monthlySalary), farmId, userId: userId || undefined, hireDate: getMoroccoDateISO(), isActive: true, currentBalance: 0 });
+    }
 
     setIsAddWorkerModal(false);
+    setEditingWorker(null);
     setName('');
     setPhone('');
+    setUserId('');
+  };
+
+  const openWorkerEdit = (worker: Worker) => {
+    setEditingWorker(worker);
+    setName(worker.name);
+    setJobTitle(worker.jobTitle);
+    setPhone(worker.phone || '');
+    setMonthlySalary(worker.monthlySalary);
+    setFarmId(worker.farmId);
+    setIsAddWorkerModal(true);
   };
 
   const handlePayWorkerSubmit = (e: React.FormEvent) => {
@@ -80,11 +103,11 @@ export const WorkersView: React.FC<WorkersViewProps> = ({ onOpenQuickAction }) =
     addWorkerTransaction({
       workerId: payModalWorker.id,
       farmId: payModalWorker.farmId,
-      date: new Date().toISOString().substring(0, 10),
+      date: getMoroccoDateISO(),
       type: payType,
       amount: Number(payAmount),
       accountId: payAccountId,
-      description: payDescription || (payType === 'salary' ? 'صرف راتب شهري' : payType === 'advance_loan' ? 'سلفة على الراتب' : 'مكافأة نجاح الدورة')
+      description: payDescription || (payType === 'salary' ? 'صرف راتب شهري' : payType === 'advance_loan' ? 'سلفة على الراتب' : payType === 'deduction' ? 'خصم من السلفة' : 'مكافأة نجاح الدورة')
     });
 
     setPayModalWorker(null);
@@ -110,13 +133,9 @@ export const WorkersView: React.FC<WorkersViewProps> = ({ onOpenQuickAction }) =
           </p>
         </div>
 
-        <button
-          onClick={() => setIsAddWorkerModal(true)}
-          className="w-full sm:w-auto px-4 py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold text-xs rounded-xl shadow flex items-center justify-center gap-1.5 transition"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>{language === 'ar' ? '+ تسجيل عامل جديد' : '+ Nouvel Ouvrier'}</span>
-        </button>
+        <div className="w-full sm:w-auto px-4 py-2.5 bg-purple-950/40 border border-purple-700/40 text-purple-200 font-bold text-xs rounded-xl text-center">
+          إضافة العمال تتم تلقائيًا من «المستخدمين والصلاحيات»
+        </div>
       </div>
 
       {/* Summary Box */}
@@ -138,7 +157,14 @@ export const WorkersView: React.FC<WorkersViewProps> = ({ onOpenQuickAction }) =
         <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4">
           <span className="text-[10px] text-stone-400 block mb-0.5">إجمالي السلف المعلقة</span>
           <div className="text-xl font-black text-amber-300">
-            {filteredWorkers.reduce((s, w) => s + (w.currentBalance || 0), 0).toLocaleString()} <span className="text-xs font-semibold text-stone-400">{currency}</span>
+            {totalOutstandingAdvances.toLocaleString()} <span className="text-xs font-semibold text-stone-400">{currency}</span>
+          </div>
+        </div>
+
+        <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4">
+          <span className="text-[10px] text-stone-400 block mb-0.5">الأجور المدفوعة هذا الشهر</span>
+          <div className="text-xl font-black text-emerald-400">
+            {totalPaidThisMonth.toLocaleString()} <span className="text-xs font-semibold text-stone-400">{currency}</span>
           </div>
         </div>
       </div>
@@ -148,7 +174,7 @@ export const WorkersView: React.FC<WorkersViewProps> = ({ onOpenQuickAction }) =
         {filteredWorkers.map(worker => {
           const farm = farms.find(f => f.id === worker.farmId);
           const history = workerTransactions.filter(t => t.workerId === worker.id);
-          const totalAdvances = history.filter(t => t.type === 'advance_loan').reduce((s, t) => s + t.amount, 0);
+          const ledger = getWorkerLedger(worker.id);
 
           return (
             <div
@@ -161,6 +187,7 @@ export const WorkersView: React.FC<WorkersViewProps> = ({ onOpenQuickAction }) =
                     <h3 className="font-extrabold text-sm text-stone-100">{worker.name}</h3>
                     <span className="text-xs text-purple-400 font-semibold block">{worker.jobTitle}</span>
                     <span className="text-[11px] text-stone-400 block mt-0.5">{worker.phone}</span>
+                    <span className="text-[10px] text-emerald-400 block mt-0.5">حساب الدخول: {users.find(user => user.id === worker.userId)?.name || 'غير مربوط'}</span>
                   </div>
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-stone-800 text-stone-300 font-bold border border-stone-700">
                     📍 {farm?.name || 'غير محدد'}
@@ -174,7 +201,11 @@ export const WorkersView: React.FC<WorkersViewProps> = ({ onOpenQuickAction }) =
                   </div>
                   <div className="flex justify-between">
                     <span className="text-stone-400">إجمالي السلف والتسبيقات:</span>
-                    <span className="font-bold text-amber-400">{totalAdvances.toLocaleString()} {currency}</span>
+                    <span className="font-bold text-amber-400">{ledger.outstandingAdvance.toLocaleString()} {currency}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-stone-400">المدفوع هذا الشهر:</span>
+                    <span className="font-bold text-emerald-400">{ledger.paidThisMonth.toLocaleString()} {currency}</span>
                   </div>
                 </div>
               </div>
@@ -185,6 +216,12 @@ export const WorkersView: React.FC<WorkersViewProps> = ({ onOpenQuickAction }) =
                   className="flex-1 py-1.5 bg-stone-800 hover:bg-stone-700 text-stone-200 rounded-xl text-xs font-bold transition"
                 >
                   السجل المالي
+                </button>
+                <button
+                  onClick={() => openWorkerEdit(worker)}
+                  className="px-3 py-1.5 bg-blue-600/20 hover:bg-blue-600/40 text-blue-300 rounded-xl text-xs font-bold transition"
+                >
+                  تعديل
                 </button>
                 <button
                   onClick={() => {
@@ -218,12 +255,13 @@ export const WorkersView: React.FC<WorkersViewProps> = ({ onOpenQuickAction }) =
                 <label className="block text-stone-300 font-bold mb-1">نوع الصرف</label>
                 <select
                   value={payType}
-                  onChange={e => setPayType(e.target.value as any)}
+                  onChange={e => setPayType(e.target.value as 'salary' | 'advance_loan' | 'bonus' | 'deduction')}
                   className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100 font-semibold"
                 >
                   <option value="salary">راتب شهري</option>
                   <option value="advance_loan">سلفة (تسبيق)</option>
                   <option value="bonus">مكافأة تشجيعية</option>
+                  <option value="deduction">خصم من السلفة</option>
                 </select>
               </div>
 
@@ -266,7 +304,7 @@ export const WorkersView: React.FC<WorkersViewProps> = ({ onOpenQuickAction }) =
           <div className="fixed inset-0 bg-stone-950/80 backdrop-blur-sm" onClick={() => setIsAddWorkerModal(false)} />
           <div className="relative w-full max-w-md bg-stone-900 border border-stone-700 rounded-2xl shadow-2xl overflow-hidden z-10 p-4 space-y-3">
             <div className="flex items-center justify-between border-b border-stone-800 pb-3">
-              <h3 className="font-extrabold text-sm text-stone-100">تسجيل عامل جديد</h3>
+              <h3 className="font-extrabold text-sm text-stone-100">تعديل بيانات العامل</h3>
               <button onClick={() => setIsAddWorkerModal(false)} className="text-stone-400 hover:text-stone-200">
                 <X className="w-5 h-5" />
               </button>
@@ -333,7 +371,7 @@ export const WorkersView: React.FC<WorkersViewProps> = ({ onOpenQuickAction }) =
                 type="submit"
                 className="w-full py-2.5 bg-purple-600 hover:bg-purple-500 text-white font-extrabold rounded-xl shadow-md transition mt-2"
               >
-                حفظ العامل
+                حفظ التعديلات
               </button>
             </form>
           </div>

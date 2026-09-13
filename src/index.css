@@ -1,6 +1,74 @@
 @import "tailwindcss";
 
 @layer base {
+  html,
+  body,
+  #root {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0;
+  }
+
+  html,
+  body {
+    overflow-x: hidden;
+    background: #0c0a09;
+  }
+
+  #root {
+    min-height: 100dvh;
+    overflow-x: clip;
+  }
+
+  header {
+    isolation: isolate;
+  }
+
+  header button,
+  header select {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  header button:active {
+    transform: scale(0.97);
+  }
+
+  header button:focus-visible,
+  header select:focus-visible {
+    outline: 2px solid #f59e0b;
+    outline-offset: 2px;
+  }
+
+  .header-popover {
+    transform-origin: top right;
+    animation: header-popover-in 180ms cubic-bezier(0.23, 1, 0.32, 1);
+  }
+
+  @keyframes header-popover-in {
+    from { opacity: 0; transform: translateY(-4px) scale(0.98); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+  }
+
+  @media (max-width: 639px) {
+    .header-notification-popover {
+      animation-name: header-notification-in;
+    }
+  }
+
+  @keyframes header-notification-in {
+    from { opacity: 0; transform: translateX(-50%) translateY(-4px) scale(0.98); }
+    to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    header button,
+    .header-popover {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+
   body {
     font-family: 'Cairo', system-ui, -apple-system, sans-serif;
   }
@@ -36,6 +104,23 @@
     width: 100% !important;
   }
 
+  /* Static, paper-friendly output */
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4,
+  .print-break-inside-avoid {
+    page-break-after: avoid !important;
+    break-inside: avoid !important;
+  }
+
   /* Hide app navigation and interactive controls */
   .no-print,
   header,
@@ -47,6 +132,37 @@
   #sidebar-quick-action-btn {
     display: none !important;
   }
+
+  /* Invoice printing: print the official invoice only, never the sales page behind it. */
+  body:has(.print-invoice) .print-invoice-host > * {
+    display: none !important;
+  }
+
+  body:has(.print-invoice) .print-invoice-host > .print-invoice {
+    display: flex !important;
+    position: static !important;
+    inset: auto !important;
+    width: 100% !important;
+    min-height: auto !important;
+    padding: 0 !important;
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+
+  body:has(.print-invoice) .print-invoice-host > .print-invoice > div:first-child {
+    display: none !important;
+  }
+
+  body:has(.print-invoice) .print-invoice-host > .print-invoice > div:last-child {
+    position: static !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    border: 0 !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+
 
   /* Ensure main container takes full width cleanly */
   main,
@@ -186,7 +302,77 @@
   }
 }
 
-.print-only {
-  display: none;
+@media screen {
+  .print-only {
+    display: none;
+  }
 }
 
+/* Platform themes. The dark theme remains the default. */
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+[data-theme="light"] .bg-stone-950 { background-color: #f8fafc !important; }
+[data-theme="light"] .bg-stone-900 { background-color: #ffffff !important; }
+[data-theme="light"] .bg-stone-800 { background-color: #f1f5f9 !important; }
+[data-theme="light"] .bg-stone-700 { background-color: #e2e8f0 !important; }
+[data-theme="light"] .text-stone-100,
+[data-theme="light"] .text-stone-200 { color: #1e293b !important; }
+[data-theme="light"] .text-stone-300 { color: #334155 !important; }
+[data-theme="light"] .text-stone-400 { color: #64748b !important; }
+[data-theme="light"] .text-stone-500 { color: #64748b !important; }
+[data-theme="light"] .border-stone-800,
+[data-theme="light"] .border-stone-700 { border-color: #cbd5e1 !important; }
+[data-theme="light"] header,
+[data-theme="light"] aside { color: #1e293b !important; }
+[data-theme="light"] input,
+[data-theme="light"] select,
+[data-theme="light"] textarea { color-scheme: light; }
+
+[data-theme="sand"] {
+  color-scheme: dark;
+}
+
+[data-theme="sand"] .bg-stone-950 { background-color: #211b15 !important; }
+[data-theme="sand"] .bg-stone-900 { background-color: #30271e !important; }
+[data-theme="sand"] .bg-stone-800 { background-color: #44372a !important; }
+[data-theme="sand"] .bg-stone-700 { background-color: #5b4937 !important; }
+[data-theme="sand"] .border-stone-800,
+[data-theme="sand"] .border-stone-700 { border-color: #6b5741 !important; }
+
+/* Comfortable layout: keep the same features while reducing visual density
+   on phones and narrow tablets. */
+.simple-interface main {
+  width: 100%;
+  max-width: 1440px;
+  margin-inline: auto;
+}
+
+@media (max-width: 639px) {
+  .simple-interface main .grid-cols-2,
+  .simple-interface main .grid-cols-4 {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .simple-interface main .gap-2,
+  .simple-interface main .gap-2\.5,
+  .simple-interface main .gap-3 {
+    gap: 0.75rem !important;
+  }
+
+  .simple-interface main .space-y-5 > * + * {
+    margin-top: 1.25rem !important;
+  }
+
+  .simple-interface main .rounded-2xl {
+    border-radius: 1rem;
+  }
+
+  .simple-interface main button,
+  .simple-interface main input,
+  .simple-interface main select,
+  .simple-interface main textarea {
+    min-height: 2.75rem;
+  }
+}

@@ -17,10 +17,12 @@ import {
   Activity,
   Award,
   FileSpreadsheet,
-  Printer
+  Printer,
+  AlertTriangle
 } from 'lucide-react';
 import { useFarm } from '../../context/FarmContext';
-import { PoultryCycle, DailyLog } from '../../types';
+import { addDaysToDateISO, getCycleDayNumber, getMoroccoDateISO } from '../../utils/date';
+import { CHICK_BREEDS, PoultryCycle, DailyLog } from '../../types';
 
 interface CyclesViewProps {
   onNavigate: (tab: string, id?: string) => void;
@@ -31,51 +33,77 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
   const {
     cycles,
     farms,
+    workers,
     partners,
+    accounts,
+    chickPurchases,
+    feedPurchases,
+    feedMovements,
+    medicationPurchases,
+    medicationMovements,
+    expenses,
+    workerTransactions,
     dailyLogs,
     addCycle,
     updateCycle,
+    deleteCycle,
     completeCycle,
     addDailyLog,
+    getFarmFeedStockKg,
     allCycleSummaries,
     currency,
     language,
-    selectedFarmId
+    selectedFarmId,
+    canManageCycles,
+    canEnterDailyLogs,
+    canManageSales,
+    isHangarAllowed
   } = useFarm();
 
   const [selectedCycleId, setSelectedCycleId] = useState<string | null>(null);
   const [isAddCycleModal, setIsAddCycleModal] = useState(false);
   const [isAddDailyLogModal, setIsAddDailyLogModal] = useState(false);
   const [isCloseCycleModal, setIsCloseCycleModal] = useState(false);
+  const [editingCycle, setEditingCycle] = useState<PoultryCycle | null>(null);
+  const [cycleToDelete, setCycleToDelete] = useState<PoultryCycle | null>(null);
+  const [formError, setFormError] = useState('');
 
   // New Cycle Form State
   const [newFarmId, setNewFarmId] = useState(farms[0]?.id || '');
   const [newCycleNumber, setNewCycleNumber] = useState(`CYC-${new Date().getFullYear()}-${cycles.length + 1}`);
-  const [newStartDate, setNewStartDate] = useState(new Date().toISOString().substring(0, 10));
-  const [newChickBreed, setNewChickBreed] = useState<'Ross 308' | 'Cobb 500' | 'Hubbard'>('Ross 308');
+  const [newStartDate, setNewStartDate] = useState(getMoroccoDateISO());
+  const [newChickBreed, setNewChickBreed] = useState<string>('Ross 308');
   const [newChickCount, setNewChickCount] = useState<number | ''>(25000);
   const [newChickPrice, setNewChickPrice] = useState<number | ''>(5.80);
   const [newHatcherySupplierId, setNewHatcherySupplierId] = useState(partners.find(p => p.type === 'supplier')?.id || '');
   const [newTargetWeight, setNewTargetWeight] = useState<number | ''>(2.2);
+  const [newChickTransport, setNewChickTransport] = useState<number | ''>(0);
+  const [newChickVaccine, setNewChickVaccine] = useState<number | ''>(0);
+  const [newChickPaid, setNewChickPaid] = useState<number | ''>(0);
+  const [newChickAccountId, setNewChickAccountId] = useState(accounts[0]?.id || '');
+  const [newWorkerIds, setNewWorkerIds] = useState<string[]>([]);
 
   // Daily Log Form State
-  const [logDate, setLogDate] = useState(new Date().toISOString().substring(0, 10));
-  const [logDayNumber, setLogDayNumber] = useState<number | ''>(25);
+  const [logDate, setLogDate] = useState(getMoroccoDateISO());
   const [logMortality, setLogMortality] = useState<number | ''>(12);
   const [logFeedKg, setLogFeedKg] = useState<number | ''>(2250);
   const [logWaterLiters, setLogWaterLiters] = useState<number | ''>(4500);
   const [logSampleWeight, setLogSampleWeight] = useState<number | ''>(1450);
   const [logTemp, setLogTemp] = useState<number | ''>(26);
   const [logHumidity, setLogHumidity] = useState<number | ''>(65);
+  const [logMedicationName, setLogMedicationName] = useState('');
+  const [logMedicationPurchaseId, setLogMedicationPurchaseId] = useState('');
+  const [logMedicationQuantity, setLogMedicationQuantity] = useState<number | ''>('');
+  const [logMedicationUnit, setLogMedicationUnit] = useState('جرعة');
   const [logNotes, setLogNotes] = useState('');
 
   // Close Cycle State
-  const [actualSaleDate, setActualSaleDate] = useState(new Date().toISOString().substring(0, 10));
+  const [actualSaleDate, setActualSaleDate] = useState(getMoroccoDateISO());
 
   // Filter cycles
   const filteredCycles = selectedFarmId === 'all'
-    ? cycles
-    : cycles.filter(c => c.farmId === selectedFarmId);
+    ? cycles.filter(c => isHangarAllowed(c.farmId, c.barnNumber))
+    : cycles.filter(c => c.farmId === selectedFarmId && isHangarAllowed(c.farmId, c.barnNumber));
 
   const activeCycles = filteredCycles.filter(c => c.status !== 'completed');
   const completedCycles = filteredCycles.filter(c => c.status === 'completed');
@@ -85,17 +113,59 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
     allCycleSummaries.find(s => s.cycleId === activeCycles[0]?.id) ||
     allCycleSummaries[0];
 
+  // Break-even plus a modest markup gives the operator a starting price.
+  // Round up to the nearest 0.25 DH so the suggested price is practical.
+  const breakEvenPrice = currentSummary?.costPerKg || 0;
+  const suggestedSalePrice = breakEvenPrice > 0
+    ? Math.ceil((breakEvenPrice * 1.2) * 4) / 4
+    : 0;
+
   const currentCycleObj = cycles.find(c => c.id === currentSummary?.cycleId);
+  const calculatedLogDayNumber = getCycleDayNumber(currentCycleObj?.startDate || '', logDate);
+  const medicationStock = medicationPurchases
+    .filter(purchase => purchase.farmId === currentCycleObj?.farmId)
+    .map(purchase => {
+      const used = dailyLogs.filter(log => log.medicationPurchaseId === purchase.id).reduce((sum, log) => sum + (log.medicationQuantity || 0), 0)
+        + medicationMovements.filter(m => m.medicationPurchaseId === purchase.id && ['issue', 'waste'].includes(m.type)).reduce((sum, m) => sum + m.quantity, 0);
+      return { purchase, available: Math.max(0, (purchase.quantity ?? 1) - used) };
+    })
+    .filter(item => item.available > 0);
+  const selectedMedication = medicationStock.find(item => item.purchase.id === logMedicationPurchaseId);
   const currentCycleLogs = dailyLogs
     .filter(l => l.cycleId === currentSummary?.cycleId)
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const cycleChickPurchases = chickPurchases.filter(p => p.cycleId === currentSummary?.cycleId);
+  const cycleFeedPurchases = feedPurchases.filter(p => p.cycleId === currentSummary?.cycleId);
+  const cycleMedicationPurchases = medicationPurchases.filter(p => p.cycleId === currentSummary?.cycleId);
+  const cycleExpenses = expenses.filter(e => e.cycleId === currentSummary?.cycleId);
+  const cycleWorkerTransactions = workerTransactions.filter(w => w.cycleId === currentSummary?.cycleId);
+  const cyclePaidAmount = cycleChickPurchases.reduce((sum, p) => sum + p.paidAmount, 0)
+    + cycleFeedPurchases.reduce((sum, p) => sum + p.paidAmount, 0)
+    + cycleMedicationPurchases.reduce((sum, p) => sum + p.paidAmount, 0)
+    + cycleExpenses.reduce((sum, e) => sum + e.paidAmount, 0);
+  const cycleDueAmount = Math.max(0, (currentSummary?.totalCycleCost || 0) - cyclePaidAmount);
+  const farmFeedStockKg = getFarmFeedStockKg(currentCycleObj?.farmId || '');
+  const currentFarmObj = farms.find(f => f.id === currentCycleObj?.farmId);
+  const feedRemainingAfterLog = Math.max(0, farmFeedStockKg - Number(logFeedKg || 0));
+  const isFeedLogOverStock = Number(logFeedKg || 0) > farmFeedStockKg;
+  const cycleCostDetails = [
+    ...cycleChickPurchases.map(p => ({ date: p.date, label: `كتاكيت • ${p.invoiceNumber}`, amount: p.totalAmount, paid: p.paidAmount })),
+    ...cycleFeedPurchases.map(p => ({ date: p.date, label: `علف • ${p.brand}`, amount: p.totalAmount, paid: p.paidAmount })),
+    ...cycleMedicationPurchases.map(p => ({ date: p.date, label: `دواء/لقاح • ${p.medicationName}`, amount: p.totalAmount, paid: p.paidAmount })),
+    ...cycleExpenses.map(e => ({ date: e.date, label: `مصروف • ${e.description || e.customCategoryName || e.category}`, amount: e.amount, paid: e.paidAmount })),
+    ...cycleWorkerTransactions.map(w => ({ date: w.date, label: `عمالة • ${w.description}`, amount: w.amount, paid: w.amount }))
+  ].sort((a, b) => b.date.localeCompare(a.date));
 
   const handleCreateCycle = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newFarmId || !newChickCount || !newChickPrice) return;
-
-    addCycle({
+    setFormError('');
+    if (!newFarmId) return setFormError('اختر المزرعة أولاً.');
+    if (!newCycleNumber.trim()) return setFormError('أدخل رقم الدورة.');
+    if (!newChickCount || Number(newChickCount) <= 0) return setFormError('عدد الكتاكيت يجب أن يكون أكبر من صفر.');
+    if (newChickPrice === '' || Number(newChickPrice) <= 0) return setFormError('سعر الكتكوت يجب أن يكون أكبر من صفر.');
+    const cycleData = {
       farmId: newFarmId,
+      workerIds: newWorkerIds,
       cycleNumber: newCycleNumber,
       startDate: newStartDate,
       chickEntryDate: newStartDate,
@@ -103,28 +173,71 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
       chickUnitPrice: Number(newChickPrice),
       chickBreed: newChickBreed,
       hatcherySupplierId: newHatcherySupplierId,
+      chickTransportCost: Number(newChickTransport || 0),
+      chickVaccineCost: Number(newChickVaccine || 0),
+      chickPaidAmount: Number(newChickPaid || 0),
+      chickPaymentMethod: Number(newChickPaid || 0) > 0 ? 'partial' : 'delayed',
+      chickAccountId: newChickAccountId || undefined,
       status: 'active',
       targetWeightKg: Number(newTargetWeight || 2.2),
-      expectedSaleDate: new Date(new Date(newStartDate).getTime() + 42 * 24 * 60 * 60 * 1000).toISOString().substring(0, 10)
-    });
+      expectedSaleDate: addDaysToDateISO(newStartDate, 42)
+    };
+
+    if (editingCycle) {
+      updateCycle(editingCycle.id, cycleData);
+      setEditingCycle(null);
+    } else {
+      addCycle(cycleData);
+    }
 
     setIsAddCycleModal(false);
   };
 
+  const openEditCycle = (cycle: PoultryCycle) => {
+    setEditingCycle(cycle);
+    setNewFarmId(cycle.farmId);
+    setNewCycleNumber(cycle.cycleNumber);
+    setNewStartDate(cycle.startDate);
+    setNewChickBreed(cycle.chickBreed as any);
+    setNewChickCount(cycle.initialChickCount);
+    setNewChickPrice(cycle.chickUnitPrice);
+    setNewHatcherySupplierId(cycle.hatcherySupplierId || '');
+    setNewTargetWeight(cycle.targetWeightKg || 2.2);
+    setNewChickTransport(cycle.chickTransportCost || 0);
+    setNewChickVaccine(cycle.chickVaccineCost || 0);
+    setNewChickPaid(cycle.chickPaidAmount || 0);
+    setNewChickAccountId(cycle.chickAccountId || accounts[0]?.id || '');
+    setNewWorkerIds(cycle.workerIds || []);
+    setFormError('');
+    setIsAddCycleModal(true);
+  };
+
+  const handleDeleteCycle = () => {
+    if (!cycleToDelete) return;
+    deleteCycle(cycleToDelete.id);
+    setCycleToDelete(null);
+    if (selectedCycleId === cycleToDelete.id) setSelectedCycleId(null);
+  };
+
   const handleSaveDailyLog = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentSummary?.cycleId) return;
+    if (!currentSummary?.cycleId || calculatedLogDayNumber < 1) return;
+    if (logMedicationPurchaseId && (!selectedMedication || Number(logMedicationQuantity || 0) <= 0 || Number(logMedicationQuantity) > selectedMedication.available)) return;
 
     addDailyLog({
       cycleId: currentSummary.cycleId,
       date: logDate,
-      dayNumber: Number(logDayNumber || 1),
+      dayNumber: calculatedLogDayNumber,
       mortalityCount: Number(logMortality || 0),
       feedConsumedKg: Number(logFeedKg || 0),
       waterConsumedLiters: logWaterLiters ? Number(logWaterLiters) : undefined,
       sampleAverageWeightGrams: logSampleWeight ? Number(logSampleWeight) : undefined,
       temperatureCelsius: logTemp ? Number(logTemp) : undefined,
       humidityPercent: logHumidity ? Number(logHumidity) : undefined,
+      medicationPurchaseId: logMedicationPurchaseId || undefined,
+      medicationQuantity: logMedicationQuantity ? Number(logMedicationQuantity) : undefined,
+      medicationName: selectedMedication?.purchase.medicationName || logMedicationName.trim() || undefined,
+      medicationUnit: selectedMedication?.purchase.unit || (logMedicationName.trim() ? logMedicationUnit : undefined),
       notes: logNotes
     });
 
@@ -165,13 +278,13 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
             <Printer className="w-4 h-4 text-amber-400" />
             <span>طباعة تقرير الدورة</span>
           </button>
-          <button
-            onClick={() => setIsAddCycleModal(true)}
+          {canManageCycles && <button
+            onClick={() => { setEditingCycle(null); setNewWorkerIds([]); setIsAddCycleModal(true); }}
             className="flex-1 sm:flex-none px-4 py-2.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-extrabold text-xs rounded-xl shadow flex items-center justify-center gap-1.5 transition"
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span>{language === 'ar' ? '+ إطلاق دورة جديدة' : '+ Nouvelle Bande'}</span>
-          </button>
+          </button>}
         </div>
       </div>
 
@@ -245,31 +358,49 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
                   <span>📅 بدء: {currentCycleObj.startDate}</span>
                   <span>⏱️ المدة: <strong className="text-stone-200">{currentSummary.durationDays} يوم</strong></span>
                 </div>
+                <div className="text-xs text-stone-400 mt-2 flex flex-wrap items-center gap-2">
+                  <span className="font-bold text-purple-300">👷 فريق الدورة:</span>
+                  {(currentCycleObj.workerIds || []).length > 0
+                    ? (currentCycleObj.workerIds || []).map(workerId => workers.find(worker => worker.id === workerId)?.name || workerId).map((name, index) => <span key={`${name}-${index}`} className="px-2 py-1 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-200">{name}</span>)
+                    : <span className="text-stone-500">لم يتم تحديد المشرفين أو العمال بعد</span>}
+                </div>
               </div>
 
               {/* Cycle Actions */}
               <div className="flex flex-wrap items-center gap-2">
                 {currentSummary.status !== 'completed' ? (
                   <>
-                    <button
+                    {canManageCycles && <button
+                      onClick={() => openEditCycle(currentCycleObj)}
+                      className="px-3 py-2 bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 border border-blue-500/30 rounded-xl text-xs font-bold"
+                    >
+                      تعديل الدورة
+                    </button>}
+                    {canManageCycles && <button
+                      onClick={() => setCycleToDelete(currentCycleObj)}
+                      className="px-3 py-2 bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/30 rounded-xl text-xs font-bold"
+                    >
+                      إلغاء الدورة
+                    </button>}
+                    {canEnterDailyLogs && <button
                       onClick={() => setIsAddDailyLogModal(true)}
                       className="px-3 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition"
                     >
                       <Plus className="w-3.5 h-3.5 text-amber-400" />
                       <span>+ تسجيل يومي</span>
-                    </button>
-                    <button
+                    </button>}
+                    {canManageSales && <button
                       onClick={() => onOpenQuickAction('sale')}
                       className="px-3 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow transition"
                     >
                       <span>+ بيع بالجملة</span>
-                    </button>
-                    <button
+                    </button>}
+                    {canManageCycles && <button
                       onClick={() => setIsCloseCycleModal(true)}
                       className="px-3 py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-xl text-xs font-extrabold transition"
                     >
                       🏁 إنهاء وإغلاق الدورة
-                    </button>
+                    </button>}
                   </>
                 ) : (
                   <div className="flex items-center gap-1.5 text-emerald-400 bg-emerald-950/40 border border-emerald-800/60 px-3 py-1.5 rounded-xl text-xs font-bold">
@@ -290,12 +421,22 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
                 <span className="text-[10px] text-stone-500 block">تكلفة الطائر: {currentSummary.costPerLiveBird.toFixed(2)} {currency}</span>
               </div>
 
+              <div className="bg-emerald-950/30 p-3 rounded-xl border border-emerald-700/40">
+                <span className="text-[10px] text-stone-400 block mb-0.5">اقتراح سعر البيع</span>
+                <span className="text-base sm:text-lg font-black text-emerald-300">
+                  {suggestedSalePrice.toFixed(2)} {currency}/كغ
+                </span>
+                <span className="text-[10px] text-stone-500 block">تعادل +20% فوق التكلفة ({breakEvenPrice.toFixed(2)} DH)</span>
+              </div>
+
               <div className="bg-stone-950/60 p-3 rounded-xl border border-stone-850">
                 <span className="text-[10px] text-stone-400 block mb-0.5">معدل التحويل الغذائي (FCR)</span>
                 <span className={`text-base sm:text-lg font-black ${currentSummary.fcr > 0 && currentSummary.fcr <= 1.65 ? 'text-emerald-400' : 'text-stone-200'}`}>
                   {currentSummary.fcr > 0 ? currentSummary.fcr.toFixed(2) : '--'}
                 </span>
-                <span className="text-[10px] text-stone-500 block">إجمالي العلف: {(currentSummary.totalFeedKg / 1000).toFixed(1)} طن</span>
+                <span className="text-[10px] text-stone-500 block">
+                  مستهلك: {(currentSummary.totalFeedConsumedKg / 1000).toFixed(1)} طن • مشتَرى: {(currentSummary.totalFeedPurchasedKg / 1000).toFixed(1)} طن
+                </span>
               </div>
 
               <div className="bg-stone-950/60 p-3 rounded-xl border border-stone-850">
@@ -355,6 +496,57 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
                   <span>إجمالي تكلفة الدورة:</span>
                   <span className="text-amber-400">{currentSummary.totalCycleCost.toLocaleString()} {currency}</span>
                 </div>
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2 text-center">
+                    <span className="block text-[10px] text-stone-400">المدفوع</span>
+                    <strong className="text-emerald-400">{cyclePaidAmount.toLocaleString()} {currency}</strong>
+                  </div>
+                  <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-2 text-center">
+                    <span className="block text-[10px] text-stone-400">المؤجل / الباقي</span>
+                    <strong className="text-rose-400">{cycleDueAmount.toLocaleString()} {currency}</strong>
+                  </div>
+                </div>
+                <div className="rounded-lg bg-stone-950/40 border border-stone-800 p-2 text-[11px] text-stone-400 space-y-1">
+                  <div className="flex justify-between"><span>العلف المشترى المرتبط بالدورة</span><strong className="text-stone-200">{currentSummary.totalFeedPurchasedKg.toLocaleString()} كغ</strong></div>
+                  <div className="flex justify-between"><span>العلف المستهلك</span><strong className="text-amber-300">{currentSummary.totalFeedConsumedKg.toLocaleString()} كغ</strong></div>
+                  <div className="flex justify-between"><span>رصيد مخزن المزرعة</span><strong className="text-emerald-300">{farmFeedStockKg.toLocaleString()} كغ</strong></div>
+                </div>
+                <div className="border-t border-stone-800 pt-3 mt-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-stone-200">العمليات المالية المسجلة</span>
+                    <span className="text-[10px] text-stone-500">{cycleCostDetails.length} عملية</span>
+                  </div>
+                  {cycleCostDetails.length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-stone-700 p-3 text-center text-[11px] text-stone-500">
+                      لا توجد فواتير أو مصاريف مرتبطة بهذه الدورة بعد.
+                      <button type="button" onClick={() => onOpenQuickAction('expense')} className="block mx-auto mt-1 text-amber-400 hover:text-amber-300 font-bold">
+                        تسجيل أول مصروف
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1">
+                      {cycleCostDetails.map((item, index) => (
+                        <div key={`${item.date}-${item.label}-${index}`} className="rounded-lg bg-stone-950/50 border border-stone-800 p-2">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="min-w-0">
+                              <div className="text-stone-300 font-semibold truncate">{item.label}</div>
+                              <div className="text-[10px] text-stone-500">{item.date}</div>
+                            </div>
+                            <div className="text-left shrink-0">
+                              <div className="font-bold text-stone-200">{item.amount.toLocaleString()} {currency}</div>
+                              <div className="text-[10px] text-emerald-400">مدفوع {item.paid.toLocaleString()} • باقي {Math.max(0, item.amount - item.paid).toLocaleString()}</div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {currentSummary.totalFeedConsumedKg > 0 && currentSummary.totalFeedPurchasedKg === 0 && (
+                  <div className="rounded-lg bg-blue-500/10 border border-blue-500/30 p-2 text-[11px] text-blue-200">
+                    ℹ️ شراء العلف يتم على مستوى مخزن المزرعة. تم احتساب تكلفة الدورة حسب العلف المصروف لها، بينما يظهر رصيد المخزن بشكل مستقل.
+                  </div>
+                )}
               </div>
             </div>
 
@@ -393,14 +585,14 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="text-xs font-extrabold text-stone-200 flex items-center gap-2">
                     <Activity className="w-4 h-4 text-blue-400" />
-                    <span>السجل اليومي للدورة (علف، نفوق، وزن، ملاحظات)</span>
+                    <span>السجل اليومي للدورة (علف، دواء، نفوق، وزن، ملاحظات)</span>
                   </h4>
-                  <button
+                  {canEnterDailyLogs && <button
                     onClick={() => setIsAddDailyLogModal(true)}
                     className="text-xs text-amber-400 hover:text-amber-300 font-bold"
                   >
                     + إضافة يوم
-                  </button>
+                  </button>}
                 </div>
 
                 <div className="max-h-60 overflow-y-auto overflow-x-auto">
@@ -411,6 +603,7 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
                         <th className="pb-2">التاريخ</th>
                         <th className="pb-2">النافق</th>
                         <th className="pb-2">العلف (كغ)</th>
+                        <th className="pb-2">الدواء</th>
                         <th className="pb-2">متوسط الوزن (غ)</th>
                         <th className="pb-2">ملاحظات</th>
                       </tr>
@@ -418,7 +611,7 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
                     <tbody className="divide-y divide-stone-800/60">
                       {currentCycleLogs.length === 0 ? (
                         <tr>
-                          <td colSpan={6} className="py-6 text-center text-stone-500">
+                          <td colSpan={7} className="py-6 text-center text-stone-500">
                             لا توجد تسجيلات يومية بعد لهذه الدورة.
                           </td>
                         </tr>
@@ -431,6 +624,7 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
                               {log.mortalityCount}
                             </td>
                             <td className="py-2 text-stone-200 font-semibold">{log.feedConsumedKg?.toLocaleString()}</td>
+                            <td className="py-2 text-indigo-300 font-semibold">{log.medicationName ? `${log.medicationName}${log.medicationQuantity ? ` (${log.medicationQuantity} ${log.medicationUnit || ''})` : ''}` : '--'}</td>
                             <td className="py-2 text-blue-300 font-semibold">{log.sampleAverageWeightGrams ? `${log.sampleAverageWeightGrams} غ` : '--'}</td>
                             <td className="py-2 text-stone-400 text-[11px] max-w-[120px] truncate">{log.notes || '-'}</td>
                           </tr>
@@ -465,19 +659,20 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
           <div className="fixed inset-0 bg-stone-950/80 backdrop-blur-sm" onClick={() => setIsAddCycleModal(false)} />
           <div className="relative w-full max-w-lg bg-stone-900 border border-stone-700 rounded-2xl shadow-2xl overflow-hidden z-10">
             <div className="p-4 bg-stone-800 border-b border-stone-700 flex items-center justify-between">
-              <h3 className="font-extrabold text-sm text-stone-100">إطلاق دورة تربية جديدة (Bande)</h3>
-              <button onClick={() => setIsAddCycleModal(false)} className="text-stone-400 hover:text-stone-200">
+              <h3 className="font-extrabold text-sm text-stone-100">{editingCycle ? 'تعديل بيانات الدورة' : 'إطلاق دورة تربية جديدة (Bande)'}</h3>
+              <button onClick={() => { setIsAddCycleModal(false); setEditingCycle(null); setFormError(''); }} className="text-stone-400 hover:text-stone-200">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleCreateCycle} className="p-4 space-y-3 text-xs max-h-[85vh] overflow-y-auto">
+              {formError && <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 font-bold">⚠️ {formError}</div>}
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-stone-300 font-bold mb-1">المزرعة *</label>
                   <select
                     value={newFarmId}
-                    onChange={e => setNewFarmId(e.target.value)}
+                    onChange={e => { setNewFarmId(e.target.value); setNewWorkerIds(current => current.filter(id => workers.some(worker => worker.id === id && worker.farmId === e.target.value))); }}
                     className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100 font-semibold"
                   >
                     {farms.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
@@ -513,9 +708,7 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
                     onChange={e => setNewChickBreed(e.target.value as any)}
                     className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100"
                   >
-                    <option value="Ross 308">Ross 308</option>
-                    <option value="Cobb 500">Cobb 500</option>
-                    <option value="Hubbard">Hubbard</option>
+                    {CHICK_BREEDS.map(breed => <option key={breed} value={breed}>{breed}</option>)}
                   </select>
                 </div>
               </div>
@@ -557,6 +750,45 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
                 </select>
               </div>
 
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-stone-300 font-bold mb-1">النقل ({currency})</label>
+                  <input type="number" min="0" value={newChickTransport} onChange={e => setNewChickTransport(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100" />
+                </div>
+                <div>
+                  <label className="block text-stone-300 font-bold mb-1">اللقاحات ({currency})</label>
+                  <input type="number" min="0" value={newChickVaccine} onChange={e => setNewChickVaccine(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100" />
+                </div>
+                <div>
+                  <label className="block text-stone-300 font-bold mb-1">المدفوع الآن ({currency})</label>
+                  <input type="number" min="0" value={newChickPaid} onChange={e => setNewChickPaid(e.target.value === '' ? '' : Number(e.target.value))} className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-emerald-400 font-bold" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-stone-300 font-bold mb-1">حساب دفع الكتاكيت</label>
+                <select value={newChickAccountId} onChange={e => setNewChickAccountId(e.target.value)} className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100">
+                  <option value="">لا يوجد دفع الآن</option>
+                  {accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              </div>
+
+              <div className="rounded-xl bg-purple-950/20 border border-purple-500/20 p-3">
+                <label className="block text-stone-200 font-bold mb-2">مشرفو وعمال الدورة</label>
+                <p className="text-[10px] text-stone-500 mb-2">اختر فريق هذه الدورة من العمال المخصصين للمزرعة.</p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {workers.filter(worker => worker.farmId === newFarmId && worker.isActive !== false).length === 0 ? (
+                    <span className="text-[11px] text-amber-300">لا يوجد عمال مسجلون لهذه المزرعة.</span>
+                  ) : workers.filter(worker => worker.farmId === newFarmId && worker.isActive !== false).map(worker => (
+                    <label key={worker.id} className="flex items-center gap-2 rounded-lg bg-stone-800/70 p-2 cursor-pointer">
+                      <input type="checkbox" checked={newWorkerIds.includes(worker.id)} onChange={event => setNewWorkerIds(current => event.target.checked ? [...current, worker.id] : current.filter(id => id !== worker.id))} className="accent-purple-500" />
+                      <span className="text-stone-200 font-semibold">{worker.name}</span>
+                      <span className="text-[10px] text-purple-300 mr-auto">{worker.jobTitle}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+
               <div>
                 <label className="block text-stone-300 font-bold mb-1">الوزن المستهدف للتسويق (كغ)</label>
                 <input
@@ -572,7 +804,7 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
                 <div className="p-3 rounded-xl bg-stone-800 border border-stone-700 flex justify-between items-center">
                   <span className="text-stone-300">إجمالي تكلفة الكتاكيت:</span>
                   <span className="font-extrabold text-amber-400">
-                    {(Number(newChickCount) * Number(newChickPrice)).toLocaleString()} {currency}
+                    {(Number(newChickCount) * Number(newChickPrice) + Number(newChickTransport || 0) + Number(newChickVaccine || 0)).toLocaleString()} {currency}
                   </span>
                 </div>
               )}
@@ -581,9 +813,25 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
                 type="submit"
                 className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-stone-950 font-extrabold rounded-xl shadow-md transition mt-2"
               >
-                تأكيد بدء الدورة
+                {editingCycle ? 'حفظ تعديلات الدورة' : 'تأكيد بدء الدورة'}
               </button>
+              <button type="button" onClick={() => { setIsAddCycleModal(false); setEditingCycle(null); setFormError(''); }} className="w-full py-2 text-stone-400 hover:text-stone-200 font-bold">إلغاء</button>
             </form>
+          </div>
+        </div>
+      )}
+
+      {cycleToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-stone-950/80" onClick={() => setCycleToDelete(null)} />
+          <div className="relative w-full max-w-md bg-stone-900 border border-stone-700 rounded-2xl p-5 z-10 space-y-4">
+            <h3 className="font-black text-stone-100">تأكيد إلغاء الدورة</h3>
+            <p className="text-sm text-stone-300">سيتم حذف الدورة وفاتورة الكتاكيت المرتبطة بها وحركات دفعها. لا يمكن التراجع عن هذا الإجراء.</p>
+            <p className="font-bold text-amber-300">{cycleToDelete.cycleNumber}</p>
+            <div className="flex gap-2">
+              <button onClick={handleDeleteCycle} className="flex-1 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold">نعم، ألغِ الدورة</button>
+              <button onClick={() => setCycleToDelete(null)} className="flex-1 py-2 bg-stone-800 text-stone-300 rounded-xl font-bold">تراجع</button>
+            </div>
           </div>
         </div>
       )}
@@ -607,6 +855,7 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
                   <input
                     type="date"
                     required
+                    min={currentCycleObj?.startDate}
                     value={logDate}
                     onChange={e => setLogDate(e.target.value)}
                     className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100"
@@ -617,34 +866,69 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
                   <input
                     type="number"
                     required
-                    value={logDayNumber}
-                    onChange={e => setLogDayNumber(e.target.value === '' ? '' : Number(e.target.value))}
+                    value={calculatedLogDayNumber || ''}
+                    readOnly
                     className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100 font-bold"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-stone-300 font-bold mb-1">عدد النافق اليوم *</label>
-                  <input
-                    type="number"
-                    required
-                    value={logMortality}
-                    onChange={e => setLogMortality(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100 font-bold text-rose-400"
-                  />
+              <div>
+                <label className="block text-stone-300 font-bold mb-1">عدد النافق اليوم *</label>
+                <input
+                  type="number"
+                  required
+                  value={logMortality}
+                  onChange={e => setLogMortality(e.target.value === '' ? '' : Number(e.target.value))}
+                  className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100 font-bold text-rose-400"
+                />
+              </div>
+
+              {/* Unified Farm Feed Consumption & Stock Deduction Box */}
+              <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 space-y-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="font-extrabold text-stone-200 flex items-center gap-1.5 text-xs">
+                    <Wheat className="w-4 h-4 text-amber-400" />
+                    <span>صرف العلف من رصيد المزرعة ({currentFarmObj?.name || 'المزرعة'})</span>
+                  </span>
+                  <span className="px-2 py-0.5 rounded-md bg-stone-800 border border-amber-500/40 font-black text-amber-300 text-[11px]">
+                    المتاح بالمزرعة: {farmFeedStockKg.toLocaleString()} كغ ({Math.floor(farmFeedStockKg / 50)} كيس)
+                  </span>
                 </div>
+
                 <div>
-                  <label className="block text-stone-300 font-bold mb-1">العلف المستهلك (كغ) *</label>
-                  <input
-                    type="number"
-                    required
-                    value={logFeedKg}
-                    onChange={e => setLogFeedKg(e.target.value === '' ? '' : Number(e.target.value))}
-                    className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100 font-bold text-amber-300"
-                  />
+                  <label className="block text-stone-300 font-bold mb-1">
+                    العلف المستهلك اليوم في الدورة (كغ) *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      placeholder="أدخل كمية العلف المستهلك اليوم"
+                      value={logFeedKg}
+                      onChange={e => setLogFeedKg(e.target.value === '' ? '' : Number(e.target.value))}
+                      className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100 font-black text-amber-300 focus:border-amber-500 text-sm"
+                    />
+                    <span className="absolute left-3 top-2.5 text-stone-400 font-bold text-xs pointer-events-none">
+                      كغ ({Number(logFeedKg || 0) > 0 ? `${(Number(logFeedKg) / 50).toFixed(1)} كيس` : '0 كيس'})
+                    </span>
+                  </div>
                 </div>
+
+                <div className="flex items-center justify-between text-[11px] pt-1.5 border-t border-stone-800/80">
+                  <span className="text-stone-400">الرصيد المتبقي في المزرعة بعد هذا الصرف:</span>
+                  <span className={`font-black ${isFeedLogOverStock ? 'text-rose-400' : 'text-emerald-400'}`}>
+                    {feedRemainingAfterLog.toLocaleString()} كغ ({Math.floor(feedRemainingAfterLog / 50)} كيس 50كغ)
+                  </span>
+                </div>
+
+                {isFeedLogOverStock && (
+                  <div className="flex items-center gap-1.5 p-2 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 text-[11px] font-semibold">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                    <span>تنبيه: الكمية المستهلكة ({logFeedKg} كغ) تتجاوز الرصيد المتوفر في المزرعة ({farmFeedStockKg} كغ).</span>
+                  </div>
+                )}
               </div>
 
               <div className="grid grid-cols-3 gap-2">
@@ -675,6 +959,25 @@ export const CyclesView: React.FC<CyclesViewProps> = ({ onNavigate, onOpenQuickA
                     onChange={e => setLogHumidity(e.target.value === '' ? '' : Number(e.target.value))}
                     className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100"
                   />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-stone-300 font-bold mb-1">الدواء / اللقاح من المخزون</label>
+                  <select value={logMedicationPurchaseId} onChange={e => { setLogMedicationPurchaseId(e.target.value); setLogMedicationName(''); }} className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100">
+                    <option value="">بدون دواء / لقاح</option>
+                    {medicationStock.map(item => <option key={item.purchase.id} value={item.purchase.id}>{item.purchase.medicationName} — متاح {item.available} {item.purchase.unit || 'وحدة'}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-stone-300 font-bold mb-1">الكمية والوحدة</label>
+                  <div className="flex gap-1">
+                    <input type="number" min="0.01" max={selectedMedication?.available} placeholder="0" value={logMedicationQuantity} onChange={e => setLogMedicationQuantity(e.target.value === '' ? '' : Number(e.target.value))} className="w-full min-w-0 bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100" />
+                    <select value={selectedMedication?.purchase.unit || logMedicationUnit} onChange={e => setLogMedicationUnit(e.target.value)} disabled={!!selectedMedication} className="w-20 bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100">
+                      <option>جرعة</option><option>مل</option><option>لتر</option><option>غ</option><option>كغ</option>
+                    </select>
+                  </div>
                 </div>
               </div>
 

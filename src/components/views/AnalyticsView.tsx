@@ -13,6 +13,7 @@ import {
   Printer
 } from 'lucide-react';
 import { useFarm } from '../../context/FarmContext';
+import { CHICK_BREEDS } from '../../types';
 
 export const AnalyticsView: React.FC = () => {
   const {
@@ -23,7 +24,7 @@ export const AnalyticsView: React.FC = () => {
     language
   } = useFarm();
 
-  const [selectedBreedFilter, setSelectedBreedFilter] = useState<'all' | 'Ross 308' | 'Cobb 500' | 'Hubbard'>('all');
+  const [selectedBreedFilter, setSelectedBreedFilter] = useState<string>('all');
 
   const filteredSummaries = selectedBreedFilter === 'all'
     ? allCycleSummaries
@@ -68,7 +69,7 @@ export const AnalyticsView: React.FC = () => {
           {/* Breed filter */}
           <div className="flex items-center gap-1.5 bg-stone-950/60 p-1 rounded-xl border border-stone-800">
             <span className="text-[11px] text-stone-400 px-2 font-bold">السلالة:</span>
-            {(['all', 'Ross 308', 'Cobb 500', 'Hubbard'] as const).map(b => (
+            {(['all', ...CHICK_BREEDS] as string[]).map(b => (
               <button
                 key={b}
                 onClick={() => setSelectedBreedFilter(b)}
@@ -100,7 +101,7 @@ export const AnalyticsView: React.FC = () => {
           <div>
             <h1 className="text-xl font-black text-stone-900">تقرير المؤشرات الفنية والإنتاجية ومقارنة السلالات</h1>
             <p className="text-xs text-stone-600">
-              نظام إدارة مزارع الدواجن • تاريخ الاستخراج: {new Date().toLocaleDateString('ar-MA')} - {new Date().toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' })}
+              مزارعنا لإدارة مزارع الدواجن • تاريخ الاستخراج: {new Date().toLocaleDateString('ar-MA')} - {new Date().toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' })}
             </p>
           </div>
           <div className="text-left text-xs text-stone-700 font-semibold">

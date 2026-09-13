@@ -2,8 +2,12 @@ import {
   Farm,
   PoultryCycle,
   ChickPurchase,
+  ChickSale,
   FeedPurchase,
+  FeedSale,
+  FeedStockMovement,
   MedicationPurchase,
+  MedicationStockMovement,
   Expense,
   WholesaleSale,
   Partner,
@@ -17,7 +21,7 @@ import {
   User,
   CycleFinancialSummary,
   BackupSnapshot,
-  AutoBackupSettings
+  AutoBackupSettings,
 } from '../types';
 import {
   INITIAL_USERS,
@@ -37,6 +41,7 @@ import {
   INITIAL_NOTIFICATIONS,
   INITIAL_AUDIT_LOGS
 } from '../data/initialData';
+import { generateComprehensiveData } from '../data/demoDataGenerator';
 
 const STORAGE_KEYS = {
   USERS: 'poultry_erp_users_v1',
@@ -49,9 +54,13 @@ const STORAGE_KEYS = {
   WORKER_TRANSACTIONS: 'poultry_erp_worker_txs_v1',
   CHICK_PURCHASES: 'poultry_erp_chick_purchases_v1',
   FEED_PURCHASES: 'poultry_erp_feed_purchases_v1',
+  FEED_MOVEMENTS: 'poultry_erp_feed_movements_v1',
   MED_PURCHASES: 'poultry_erp_med_purchases_v1',
+  MED_MOVEMENTS: 'poultry_erp_med_movements_v1',
   EXPENSES: 'poultry_erp_expenses_v1',
   SALES: 'poultry_erp_sales_v1',
+  FEED_SALES: 'poultry_erp_feed_sales_v1',
+  CHICK_SALES: 'poultry_erp_chick_sales_v1',
   TRANSACTIONS: 'poultry_erp_transactions_v1',
   NOTIFICATIONS: 'poultry_erp_notifications_v1',
   AUDIT_LOGS: 'poultry_erp_audit_logs_v1',
@@ -63,6 +72,31 @@ const STORAGE_KEYS = {
   BACKUP_SNAPSHOTS: 'poultry_erp_backup_snapshots_v1'
 };
 
+const REMOTE_TO_STORAGE: Record<string, string> = {
+  users: STORAGE_KEYS.USERS,
+  farms: STORAGE_KEYS.FARMS,
+  cycles: STORAGE_KEYS.CYCLES,
+  dailyLogs: STORAGE_KEYS.DAILY_LOGS,
+  partners: STORAGE_KEYS.PARTNERS,
+  accounts: STORAGE_KEYS.ACCOUNTS,
+  workers: STORAGE_KEYS.WORKERS,
+  workerTransactions: STORAGE_KEYS.WORKER_TRANSACTIONS,
+  chickPurchases: STORAGE_KEYS.CHICK_PURCHASES,
+  feedPurchases: STORAGE_KEYS.FEED_PURCHASES,
+  feedMovements: STORAGE_KEYS.FEED_MOVEMENTS,
+  medicationPurchases: STORAGE_KEYS.MED_PURCHASES,
+  medicationMovements: STORAGE_KEYS.MED_MOVEMENTS,
+  expenses: STORAGE_KEYS.EXPENSES,
+  sales: STORAGE_KEYS.SALES,
+  feedSales: STORAGE_KEYS.FEED_SALES,
+  chickSales: STORAGE_KEYS.CHICK_SALES,
+  transactions: STORAGE_KEYS.TRANSACTIONS,
+  notifications: STORAGE_KEYS.NOTIFICATIONS,
+  auditLogs: STORAGE_KEYS.AUDIT_LOGS,
+  backupSnapshots: STORAGE_KEYS.BACKUP_SNAPSHOTS,
+  autoBackupSettings: STORAGE_KEYS.AUTO_BACKUP_SETTINGS,
+};
+
 const DEFAULT_AUTO_BACKUP_SETTINGS: AutoBackupSettings = {
   enabled: true,
   intervalMinutes: 60,
@@ -72,6 +106,12 @@ const DEFAULT_AUTO_BACKUP_SETTINGS: AutoBackupSettings = {
 };
 
 export class StorageService {
+  private static emitSaveStatus(status: 'success' | 'error', key: string, remote = false): void {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('poultry:save-status', { detail: { status, key, remote } }));
+    }
+  }
+
   private static getItem<T>(key: string, defaultValue: T): T {
     try {
       const data = localStorage.getItem(key);
@@ -86,119 +126,237 @@ export class StorageService {
   private static setItem<T>(key: string, value: T): void {
     try {
       localStorage.setItem(key, JSON.stringify(value));
+      this.emitSaveStatus('success', key);
     } catch (e) {
       console.error(`Error saving ${key} to storage:`, e);
+      this.emitSaveStatus('error', key);
+      return;
     }
+
+    const remoteKey = Object.entries(REMOTE_TO_STORAGE).find(([, storageKey]) => storageKey === key)?.[0];
+    if (remoteKey && navigator.onLine) {
+      fetch(`/api/state/${remoteKey}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ data: value }),
+      }).then(response => {
+        if (!response.ok) {
+          console.error(`Remote save rejected for ${remoteKey}: ${response.status}`);
+          this.emitSaveStatus('error', remoteKey, true);
+          return;
+        }
+        this.emitSaveStatus('success', remoteKey, true);
+      }).catch(error => {
+        console.error(`Remote save failed for ${remoteKey}:`, error);
+        this.emitSaveStatus('error', remoteKey, true);
+      });
+    }
+  }
+
+  static async hydrateFromRemote(): Promise<boolean> {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 8000);
+    try {
+      const response = await fetch('/api/state', { headers: { Accept: 'application/json' }, signal: controller.signal });
+      if (!response.ok) return false;
+      const remote = await response.json() as Record<string, unknown>;
+      for (const [remoteKey, storageKey] of Object.entries(REMOTE_TO_STORAGE)) {
+        if (remote[remoteKey] !== undefined) localStorage.setItem(storageKey, JSON.stringify(remote[remoteKey]));
+      }
+      return true;
+    } catch (error) {
+      console.warn('Remote database unavailable; using local cache.', error);
+      return false;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
+
+  static async syncAllToRemote(): Promise<number> {
+    const changes = Object.entries(REMOTE_TO_STORAGE).map(([key, storageKey]) => ({
+      key,
+      data: JSON.parse(localStorage.getItem(storageKey) || (key === 'autoBackupSettings' ? JSON.stringify(DEFAULT_AUTO_BACKUP_SETTINGS) : '[]'))
+    }));
+    const response = await fetch('/api/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ localChanges: changes })
+    });
+    if (!response.ok) throw new Error('تعذر حفظ المزامنة');
+    const result = await response.json() as { appliedRecords?: number };
+    return result.appliedRecords || 0;
   }
 
   // Loaders with default initialization
   static getUsers(): User[] {
-    return this.getItem(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const users = this.getItem<User[]>(STORAGE_KEYS.USERS, INITIAL_USERS);
+    const updated = users.map(u => {
+      const init = INITIAL_USERS.find(iu => iu.phone === u.phone || iu.id === u.id);
+      if (init) {
+        return {
+          ...u,
+          pin: u.pin || init.pin,
+          role: u.role || init.role,
+          status: u.status || init.status || 'active'
+        };
+      }
+      return u;
+    });
+    for (const initUser of INITIAL_USERS) {
+      if (!updated.some(u => u.phone === initUser.phone || u.id === initUser.id)) {
+        updated.push(initUser);
+      }
+    }
+    return updated;
   }
   static saveUsers(data: User[]): void {
     this.setItem(STORAGE_KEYS.USERS, data);
   }
 
   static getFarms(): Farm[] {
-    return this.getItem(STORAGE_KEYS.FARMS, INITIAL_FARMS);
+    const data = this.getItem<Farm[]>(STORAGE_KEYS.FARMS, []);
+    return data && data.length > 0 ? data : INITIAL_FARMS;
   }
   static saveFarms(data: Farm[]): void {
     this.setItem(STORAGE_KEYS.FARMS, data);
   }
 
   static getCycles(): PoultryCycle[] {
-    return this.getItem(STORAGE_KEYS.CYCLES, INITIAL_CYCLES);
+    const data = this.getItem<PoultryCycle[]>(STORAGE_KEYS.CYCLES, []);
+    return data && data.length > 0 ? data : INITIAL_CYCLES;
   }
   static saveCycles(data: PoultryCycle[]): void {
     this.setItem(STORAGE_KEYS.CYCLES, data);
   }
 
   static getDailyLogs(): DailyLog[] {
-    return this.getItem(STORAGE_KEYS.DAILY_LOGS, INITIAL_DAILY_LOGS);
+    const data = this.getItem<DailyLog[]>(STORAGE_KEYS.DAILY_LOGS, []);
+    return data && data.length > 0 ? data : INITIAL_DAILY_LOGS;
   }
   static saveDailyLogs(data: DailyLog[]): void {
     this.setItem(STORAGE_KEYS.DAILY_LOGS, data);
   }
 
   static getPartners(): Partner[] {
-    return this.getItem(STORAGE_KEYS.PARTNERS, INITIAL_PARTNERS);
+    const data = this.getItem<Partner[]>(STORAGE_KEYS.PARTNERS, []);
+    return data && data.length > 0 ? data : INITIAL_PARTNERS;
   }
   static savePartners(data: Partner[]): void {
     this.setItem(STORAGE_KEYS.PARTNERS, data);
   }
 
   static getAccounts(): CashAccount[] {
-    return this.getItem(STORAGE_KEYS.ACCOUNTS, INITIAL_ACCOUNTS);
+    const data = this.getItem<CashAccount[]>(STORAGE_KEYS.ACCOUNTS, []);
+    return data && data.length > 0 ? data : INITIAL_ACCOUNTS;
   }
   static saveAccounts(data: CashAccount[]): void {
     this.setItem(STORAGE_KEYS.ACCOUNTS, data);
   }
 
   static getWorkers(): Worker[] {
-    return this.getItem(STORAGE_KEYS.WORKERS, INITIAL_WORKERS);
+    const data = this.getItem<Worker[]>(STORAGE_KEYS.WORKERS, []);
+    return data && data.length > 0 ? data : INITIAL_WORKERS;
   }
   static saveWorkers(data: Worker[]): void {
     this.setItem(STORAGE_KEYS.WORKERS, data);
   }
 
   static getWorkerTransactions(): WorkerTransaction[] {
-    return this.getItem(STORAGE_KEYS.WORKER_TRANSACTIONS, INITIAL_WORKER_TRANSACTIONS);
+    const data = this.getItem<WorkerTransaction[]>(STORAGE_KEYS.WORKER_TRANSACTIONS, []);
+    return data && data.length > 0 ? data : INITIAL_WORKER_TRANSACTIONS;
   }
   static saveWorkerTransactions(data: WorkerTransaction[]): void {
     this.setItem(STORAGE_KEYS.WORKER_TRANSACTIONS, data);
   }
 
   static getChickPurchases(): ChickPurchase[] {
-    return this.getItem(STORAGE_KEYS.CHICK_PURCHASES, INITIAL_CHICK_PURCHASES);
+    const data = this.getItem<ChickPurchase[]>(STORAGE_KEYS.CHICK_PURCHASES, []);
+    return data && data.length > 0 ? data : INITIAL_CHICK_PURCHASES;
   }
   static saveChickPurchases(data: ChickPurchase[]): void {
     this.setItem(STORAGE_KEYS.CHICK_PURCHASES, data);
   }
 
   static getFeedPurchases(): FeedPurchase[] {
-    return this.getItem(STORAGE_KEYS.FEED_PURCHASES, INITIAL_FEED_PURCHASES);
+    const data = this.getItem<FeedPurchase[]>(STORAGE_KEYS.FEED_PURCHASES, []);
+    return data && data.length > 0 ? data : INITIAL_FEED_PURCHASES;
   }
   static saveFeedPurchases(data: FeedPurchase[]): void {
     this.setItem(STORAGE_KEYS.FEED_PURCHASES, data);
   }
 
+  static getFeedMovements(): FeedStockMovement[] {
+    return this.getItem(STORAGE_KEYS.FEED_MOVEMENTS, []);
+  }
+  static saveFeedMovements(data: FeedStockMovement[]): void {
+    this.setItem(STORAGE_KEYS.FEED_MOVEMENTS, data);
+  }
+
   static getMedicationPurchases(): MedicationPurchase[] {
-    return this.getItem(STORAGE_KEYS.MED_PURCHASES, INITIAL_MEDICATION_PURCHASES);
+    const data = this.getItem<MedicationPurchase[]>(STORAGE_KEYS.MED_PURCHASES, []);
+    return data && data.length > 0 ? data : INITIAL_MEDICATION_PURCHASES;
   }
   static saveMedicationPurchases(data: MedicationPurchase[]): void {
     this.setItem(STORAGE_KEYS.MED_PURCHASES, data);
   }
 
+  static getMedicationMovements(): MedicationStockMovement[] {
+    return this.getItem(STORAGE_KEYS.MED_MOVEMENTS, []);
+  }
+  static saveMedicationMovements(data: MedicationStockMovement[]): void {
+    this.setItem(STORAGE_KEYS.MED_MOVEMENTS, data);
+  }
+
+
   static getExpenses(): Expense[] {
-    return this.getItem(STORAGE_KEYS.EXPENSES, INITIAL_EXPENSES);
+    const data = this.getItem<Expense[]>(STORAGE_KEYS.EXPENSES, []);
+    return data && data.length > 0 ? data : INITIAL_EXPENSES;
   }
   static saveExpenses(data: Expense[]): void {
     this.setItem(STORAGE_KEYS.EXPENSES, data);
   }
 
   static getSales(): WholesaleSale[] {
-    return this.getItem(STORAGE_KEYS.SALES, INITIAL_SALES);
+    const data = this.getItem<WholesaleSale[]>(STORAGE_KEYS.SALES, []);
+    return data && data.length > 0 ? data : INITIAL_SALES;
   }
   static saveSales(data: WholesaleSale[]): void {
     this.setItem(STORAGE_KEYS.SALES, data);
   }
 
+  static getFeedSales(): FeedSale[] {
+    return this.getItem(STORAGE_KEYS.FEED_SALES, []);
+  }
+  static saveFeedSales(data: FeedSale[]): void {
+    this.setItem(STORAGE_KEYS.FEED_SALES, data);
+  }
+
+  static getChickSales(): ChickSale[] {
+    return this.getItem(STORAGE_KEYS.CHICK_SALES, []);
+  }
+  static saveChickSales(data: ChickSale[]): void {
+    this.setItem(STORAGE_KEYS.CHICK_SALES, data);
+  }
+
   static getTransactions(): FinancialTransaction[] {
-    return this.getItem(STORAGE_KEYS.TRANSACTIONS, INITIAL_TRANSACTIONS);
+    const data = this.getItem<FinancialTransaction[]>(STORAGE_KEYS.TRANSACTIONS, []);
+    return data && data.length > 0 ? data : INITIAL_TRANSACTIONS;
   }
   static saveTransactions(data: FinancialTransaction[]): void {
     this.setItem(STORAGE_KEYS.TRANSACTIONS, data);
   }
 
   static getNotifications(): AppNotification[] {
-    return this.getItem(STORAGE_KEYS.NOTIFICATIONS, INITIAL_NOTIFICATIONS);
+    const data = this.getItem<AppNotification[]>(STORAGE_KEYS.NOTIFICATIONS, []);
+    return data && data.length > 0 ? data : INITIAL_NOTIFICATIONS;
   }
   static saveNotifications(data: AppNotification[]): void {
     this.setItem(STORAGE_KEYS.NOTIFICATIONS, data);
   }
 
   static getAuditLogs(): AuditLogEntry[] {
-    return this.getItem(STORAGE_KEYS.AUDIT_LOGS, INITIAL_AUDIT_LOGS);
+    const data = this.getItem<AuditLogEntry[]>(STORAGE_KEYS.AUDIT_LOGS, []);
+    return data && data.length > 0 ? data : INITIAL_AUDIT_LOGS;
   }
   static saveAuditLogs(data: AuditLogEntry[]): void {
     this.setItem(STORAGE_KEYS.AUDIT_LOGS, data);
@@ -315,7 +473,15 @@ export class StorageService {
       id: `aud-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
       timestamp: new Date().toISOString().replace('T', ' ').substring(0, 19)
     };
-    this.saveAuditLogs([newEntry, ...logs].slice(0, 500)); // keep last 500
+    try { localStorage.setItem(STORAGE_KEYS.AUDIT_LOGS, JSON.stringify([newEntry, ...logs].slice(0, 500))); } catch (error) { console.error('Local audit save failed:', error); }
+    if (navigator.onLine) {
+      fetch('/api/audit', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entry })
+      }).then(response => {
+        if (!response.ok) console.error(`Audit append rejected: ${response.status}`);
+      }).catch(error => console.error('Audit append failed:', error));
+    }
 
     // Auto-backup on critical actions if enabled
     const settings = this.getAutoBackupSettings();
@@ -344,7 +510,9 @@ export class StorageService {
       workerTransactions: this.getWorkerTransactions(),
       chickPurchases: this.getChickPurchases(),
       feedPurchases: this.getFeedPurchases(),
+      feedMovements: this.getFeedMovements(),
       medicationPurchases: this.getMedicationPurchases(),
+      medicationMovements: this.getMedicationMovements(),
       expenses: this.getExpenses(),
       sales: this.getSales(),
       transactions: this.getTransactions(),
@@ -485,7 +653,9 @@ export class StorageService {
       if (data.workerTransactions) this.saveWorkerTransactions(data.workerTransactions);
       if (data.chickPurchases) this.saveChickPurchases(data.chickPurchases);
       if (data.feedPurchases) this.saveFeedPurchases(data.feedPurchases);
+      if (data.feedMovements) this.saveFeedMovements(data.feedMovements);
       if (data.medicationPurchases) this.saveMedicationPurchases(data.medicationPurchases);
+      if (data.medicationMovements) this.saveMedicationMovements(data.medicationMovements);
       if (data.expenses) this.saveExpenses(data.expenses);
       if (data.sales) this.saveSales(data.sales);
       if (data.transactions) this.saveTransactions(data.transactions);
@@ -498,22 +668,30 @@ export class StorageService {
 
   static resetToDemoData(): void {
     localStorage.clear();
-    this.saveUsers(INITIAL_USERS);
-    this.saveFarms(INITIAL_FARMS);
-    this.saveCycles(INITIAL_CYCLES);
-    this.saveDailyLogs(INITIAL_DAILY_LOGS);
-    this.savePartners(INITIAL_PARTNERS);
-    this.saveAccounts(INITIAL_ACCOUNTS);
-    this.saveWorkers(INITIAL_WORKERS);
-    this.saveWorkerTransactions(INITIAL_WORKER_TRANSACTIONS);
-    this.saveChickPurchases(INITIAL_CHICK_PURCHASES);
-    this.saveFeedPurchases(INITIAL_FEED_PURCHASES);
-    this.saveMedicationPurchases(INITIAL_MEDICATION_PURCHASES);
-    this.saveExpenses(INITIAL_EXPENSES);
-    this.saveSales(INITIAL_SALES);
-    this.saveTransactions(INITIAL_TRANSACTIONS);
-    this.saveNotifications(INITIAL_NOTIFICATIONS);
-    this.saveAuditLogs(INITIAL_AUDIT_LOGS);
+    const data = generateComprehensiveData();
+    this.saveUsers(data.users);
+    this.saveFarms(data.farms);
+    this.saveCycles(data.cycles);
+    this.saveDailyLogs(data.dailyLogs);
+    this.savePartners(data.partners);
+    this.saveAccounts(data.accounts);
+    this.saveWorkers(data.workers);
+    this.saveWorkerTransactions(data.workerTransactions);
+    this.saveChickPurchases(data.chickPurchases);
+    this.saveFeedPurchases(data.feedPurchases);
+    this.saveFeedMovements(data.feedMovements || []);
+    this.saveMedicationPurchases(data.medicationPurchases);
+    this.saveMedicationMovements(data.medicationMovements || []);
+    this.saveExpenses(data.expenses);
+    this.saveSales(data.sales);
+    this.saveFeedSales(data.feedSales || []);
+    this.saveChickSales(data.chickSales || []);
+    this.saveTransactions(data.transactions);
+    this.saveNotifications(data.notifications);
+    this.saveAuditLogs(data.auditLogs);
+    this.saveAutoBackupSettings(data.autoBackupSettings);
+    this.saveBackupSnapshots(data.backupSnapshots);
+    void this.syncAllToRemote();
   }
 
   // Real Dynamic Calculations
@@ -552,6 +730,8 @@ export class StorageService {
   } {
     const partners = this.getPartners();
     const sales = this.getSales();
+    const feedSales = this.getFeedSales();
+    const chickSales = this.getChickSales();
     const chicks = this.getChickPurchases();
     const feeds = this.getFeedPurchases();
     const meds = this.getMedicationPurchases();
@@ -570,7 +750,7 @@ export class StorageService {
       }
     });
 
-    // Sales to customers
+    // Sales to customers (Wholesale chickens)
     sales.forEach(s => {
       if (!customerMap[s.customerId]) {
         customerMap[s.customerId] = { totalSales: 0, totalPaid: 0, remainingDue: 0 };
@@ -578,6 +758,26 @@ export class StorageService {
       customerMap[s.customerId].totalSales += s.netTotal;
       customerMap[s.customerId].totalPaid += s.paidAmount;
       customerMap[s.customerId].remainingDue += s.remainingAmount;
+    });
+
+    // Feed sales to customers
+    feedSales.forEach(fs => {
+      if (!customerMap[fs.customerId]) {
+        customerMap[fs.customerId] = { totalSales: 0, totalPaid: 0, remainingDue: 0 };
+      }
+      customerMap[fs.customerId].totalSales += fs.totalAmount;
+      customerMap[fs.customerId].totalPaid += fs.paidAmount;
+      customerMap[fs.customerId].remainingDue += fs.remainingAmount;
+    });
+
+    // Chick sales to customers
+    chickSales.forEach(cs => {
+      if (!customerMap[cs.customerId]) {
+        customerMap[cs.customerId] = { totalSales: 0, totalPaid: 0, remainingDue: 0 };
+      }
+      customerMap[cs.customerId].totalSales += cs.totalAmount;
+      customerMap[cs.customerId].totalPaid += cs.paidAmount;
+      customerMap[cs.customerId].remainingDue += cs.remainingAmount;
     });
 
     // Extra customer payments from transactions (debt settlement)
@@ -618,8 +818,9 @@ export class StorageService {
       supplierMap[m.supplierId].remainingDebt += m.remainingAmount;
     });
 
-    // Other expenses from suppliers
-    expenses.filter(e => e.supplierId).forEach(e => {
+    // Other expenses from suppliers. Chick/feed/medication invoices are already
+    // represented by their dedicated purchase ledgers and must not be counted twice.
+    expenses.filter(e => e.supplierId && !['chicks', 'feed', 'medication', 'vaccines'].includes(e.category)).forEach(e => {
       const sId = e.supplierId!;
       if (!supplierMap[sId]) {
         supplierMap[sId] = { totalPurchases: 0, totalPaid: 0, remainingDebt: 0 };
@@ -667,10 +868,13 @@ export class StorageService {
     }
 
     const feeds = this.getFeedPurchases().filter(f => f.cycleId === cycleId);
+    const chickPurchases = this.getChickPurchases().filter(c => c.cycleId === cycleId);
     const meds = this.getMedicationPurchases().filter(m => m.cycleId === cycleId);
+    const medicationMovements = this.getMedicationMovements().filter(m => m.cycleId === cycleId);
     const expenses = this.getExpenses().filter(e => e.cycleId === cycleId);
     const sales = this.getSales().filter(s => s.cycleId === cycleId);
     const dailyLogs = this.getDailyLogs().filter(l => l.cycleId === cycleId);
+    const feedMovements = this.getFeedMovements().filter(m => m.cycleId === cycleId);
     const workerTxs = this.getWorkerTransactions().filter(w => w.cycleId === cycleId);
 
     // Duration
@@ -697,16 +901,57 @@ export class StorageService {
 
     // Chicks Cost
     const chicksExp = expenses.filter(e => e.category === 'chicks');
-    const chicksCost = chicksExp.reduce((sum, e) => sum + e.amount, 0) || (cycle.initialChickCount * cycle.chickUnitPrice);
+    const chicksInvoiceCost = chickPurchases.reduce((sum, purchase) => sum + purchase.totalAmount, 0);
+    const chicksCost = chicksInvoiceCost || chicksExp.reduce((sum, e) => sum + e.amount, 0) || (
+      cycle.initialChickCount * cycle.chickUnitPrice
+      + (cycle.chickTransportCost || 0)
+      + (cycle.chickVaccineCost || 0)
+    );
 
-    // Feed stats
-    const totalFeedKg = feeds.reduce((sum, f) => sum + f.quantityKg, 0);
-    const totalFeedCost = feeds.reduce((sum, f) => sum + f.totalAmount, 0);
+    // Feed stats: purchases are used for stock/cost, while daily logs are the
+    // source of truth for actual consumption and FCR.
+    const totalFeedPurchasedKg = feeds.reduce((sum, f) => sum + f.quantityKg, 0);
+    // Feed is bought into the farm warehouse, so a purchase may intentionally
+    // have no cycleId. Value a cycle by the feed actually issued to it.
+    const farmFeeds = this.getFeedPurchases().filter(f => f.farmId === cycle.farmId);
+    const farmPurchasedKg = farmFeeds.reduce((sum, f) => sum + Math.max(0, f.quantityKg || 0), 0);
+    const farmPurchasedCost = farmFeeds.reduce((sum, f) => sum + Math.max(0, f.totalAmount || 0), 0);
+    const weightedFarmFeedCost = farmPurchasedKg > 0 ? farmPurchasedCost / farmPurchasedKg : 0;
+    const movementLogIds = new Set(feedMovements.filter(m => m.dailyLogId).map(m => m.dailyLogId));
+    const legacyDailyConsumptionKg = dailyLogs
+      .filter(log => !movementLogIds.has(log.id))
+      .reduce((sum, l) => sum + Math.max(0, l.feedConsumedKg || 0), 0);
+    const issuedFeedKg = feedMovements
+      .filter(m => m.type === 'issue')
+      .reduce((sum, m) => sum + Math.max(0, m.quantityKg || 0), 0);
+    const returnedFeedKg = feedMovements
+      .filter(m => m.type === 'return')
+      .reduce((sum, m) => sum + Math.max(0, m.quantityKg || 0), 0);
+    const wastedFeedKg = feedMovements
+      .filter(m => m.type === 'waste')
+      .reduce((sum, m) => sum + Math.max(0, m.quantityKg || 0), 0);
+    const netIssuedFeedKg = Math.max(0, issuedFeedKg - returnedFeedKg - wastedFeedKg);
+    const totalFeedConsumedKg = netIssuedFeedKg + legacyDailyConsumptionKg;
+    const totalFeedKg = totalFeedConsumedKg;
+    const issuedFeedCost = feedMovements
+      .filter(m => m.type === 'issue' && m.cycleId === cycleId)
+      .reduce((sum, movement) => {
+        const source = movement.sourcePurchaseId
+          ? this.getFeedPurchases().find(p => p.id === movement.sourcePurchaseId)
+          : undefined;
+        const unitCost = movement.unitCostPerKg || source?.unitPricePerKg || weightedFarmFeedCost;
+        return sum + Math.max(0, movement.quantityKg || 0) * unitCost;
+      }, 0);
+    const totalFeedCost = issuedFeedCost + (legacyDailyConsumptionKg * weightedFarmFeedCost)
+      || feeds.reduce((sum, f) => sum + f.totalAmount, 0);
     const feedCostPerBird = cycle.initialChickCount > 0 ? totalFeedCost / cycle.initialChickCount : 0;
-    const fcr = totalWeightSoldKg > 0 ? totalFeedKg / totalWeightSoldKg : 0;
+    const fcr = totalWeightSoldKg > 0 ? totalFeedConsumedKg / totalWeightSoldKg : 0;
 
     // Meds stats
-    const totalMedicationCost = meds.reduce((sum, m) => sum + m.totalAmount, 0);
+    const issuedMedicationCost = medicationMovements
+      .filter(m => m.type === 'issue')
+      .reduce((sum, movement) => sum + (movement.totalCost || movement.quantity * (movement.unitCost || 0)), 0);
+    const totalMedicationCost = issuedMedicationCost || meds.reduce((sum, m) => sum + m.totalAmount, 0);
     const medicationCostPerBird = cycle.initialChickCount > 0 ? totalMedicationCost / cycle.initialChickCount : 0;
 
     // Labor & Utilities
@@ -718,7 +963,7 @@ export class StorageService {
       .reduce((sum, e) => sum + e.amount, 0);
 
     const totalOtherExpenses = expenses
-      .filter(e => !['chicks', 'labor', 'electricity', 'water', 'fuel', 'gas'].includes(e.category as string))
+      .filter(e => !['chicks', 'feed', 'medication', 'vaccines', 'labor', 'electricity', 'water', 'fuel', 'gas'].includes(e.category as string))
       .reduce((sum, e) => sum + e.amount, 0);
 
     // Total Cost
@@ -751,6 +996,8 @@ export class StorageService {
       remainingLiveChicks,
       totalWeightSoldKg,
       averageBirdWeightKg,
+      totalFeedPurchasedKg,
+      totalFeedConsumedKg,
       totalFeedKg,
       totalFeedCost,
       feedCostPerBird,

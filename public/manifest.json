@@ -1,0 +1,26 @@
+{
+  "name": "مزارعنا - إدارة مزارع الدواجن",
+  "short_name": "مزارعنا",
+  "description": "تطبيق متكامل واحترافي لإدارة مزارع ودورات تربية الدجاج، الأعلاف والأدوية، المبيعات والذمم المالية",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c0a09",
+  "theme_color": "#f59e0b",
+  "orientation": "portrait-primary",
+  "lang": "ar",
+  "dir": "rtl",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

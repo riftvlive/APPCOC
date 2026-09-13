@@ -60,22 +60,28 @@ export const UsersView: React.FC<UsersViewProps> = ({ onNavigate }) => {
 
   // Form states
   const [name, setName] = useState('');
+  const [jobTitle, setJobTitle] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<UserRole>('farm_manager');
   const [status, setStatus] = useState<'active' | 'inactive'>('active');
   const [allowedFarmIds, setAllowedFarmIds] = useState<string[]>([]);
+  const [allowedHangarIds, setAllowedHangarIds] = useState<string[]>([]);
+  const [allHangarsSelected, setAllHangarsSelected] = useState(true);
   const [allFarmsSelected, setAllFarmsSelected] = useState(true);
   const [notes, setNotes] = useState('');
   const [permissions, setPermissions] = useState<UserPermissions>(DEFAULT_ROLE_PERMISSIONS.farm_manager);
 
   const openCreateModal = () => {
     setName('');
+    setJobTitle('');
     setPhone('');
     setEmail('');
     setRole('farm_manager');
     setStatus('active');
     setAllowedFarmIds([]);
+    setAllowedHangarIds([]);
+    setAllHangarsSelected(true);
     setAllFarmsSelected(true);
     setNotes('');
     setPermissions(DEFAULT_ROLE_PERMISSIONS.farm_manager);
@@ -86,11 +92,14 @@ export const UsersView: React.FC<UsersViewProps> = ({ onNavigate }) => {
   const openEditModal = (user: User) => {
     setEditingUser(user);
     setName(user.name);
+    setJobTitle(user.jobTitle || '');
     setPhone(user.phone || '');
     setEmail(user.email || '');
     setRole(user.role);
     setStatus(user.status || 'active');
     setAllowedFarmIds(user.allowedFarmIds || []);
+    setAllowedHangarIds(user.allowedHangarIds || []);
+    setAllHangarsSelected(!user.allowedHangarIds || user.allowedHangarIds.length === 0);
     setAllFarmsSelected(!user.allowedFarmIds || user.allowedFarmIds.length === 0);
     setNotes(user.notes || '');
     setPermissions({
@@ -144,11 +153,13 @@ export const UsersView: React.FC<UsersViewProps> = ({ onNavigate }) => {
 
     const userPayload: Omit<User, 'id' | 'createdAt'> = {
       name: name.trim(),
+      jobTitle: jobTitle.trim() || undefined,
       phone: phone.trim(),
       email: email.trim() || undefined,
       role,
       status,
       allowedFarmIds: allFarmsSelected ? undefined : allowedFarmIds,
+      allowedHangarIds: allHangarsSelected ? undefined : allowedHangarIds,
       permissions,
       notes: notes.trim() || undefined
     };
@@ -237,7 +248,8 @@ export const UsersView: React.FC<UsersViewProps> = ({ onNavigate }) => {
     { key: 'canManageFinance', label: 'الخزينة والحسابات البنكية', desc: 'إدارة الصناديق، التحويلات، وتسوية ديون الشركاء', icon: Key },
     { key: 'canManageWorkers', label: 'الموظفين والعمال والأجور', desc: 'تسجيل العمال، السلف (Avances)، وصرف الرواتب', icon: Briefcase },
     { key: 'canViewReports', label: 'التقارير المالية والأرباح', desc: 'عرض تقارير P&L وتحليل تكلفة الكيلوغرام', icon: FileSpreadsheet },
-    { key: 'canManageUsers', label: 'إدارة المستخدمين والصلاحيات', desc: 'إضافة حسابات الموظفين وتعديل أدوارهم في النظام', icon: Shield }
+    { key: 'canManageUsers', label: 'إدارة المستخدمين والصلاحيات', desc: 'إضافة حسابات الموظفين وتعديل أدوارهم في النظام', icon: Shield },
+    { key: 'canCancelOperations', label: 'إلغاء العمليات الخاطئة', desc: 'إلغاء قيد مسجل بالخطأ من سجل النشاط مع حفظ السبب واسم المدير', icon: History }
   ];
 
   return (
@@ -503,6 +515,7 @@ export const UsersView: React.FC<UsersViewProps> = ({ onNavigate }) => {
                           </span>
                         )}
                       </h3>
+                      {user.jobTitle && <span className="text-[10px] text-purple-300 font-semibold block mt-0.5">{user.jobTitle}</span>}
                       <div className="flex items-center gap-2 text-xs text-stone-400 mt-0.5">
                         {user.phone ? (
                           <span className="flex items-center gap-1 dir-ltr text-[11px]">
@@ -657,6 +670,17 @@ export const UsersView: React.FC<UsersViewProps> = ({ onNavigate }) => {
                   />
                 </div>
 
+                <div className="sm:col-span-2">
+                  <label className="block text-stone-300 font-bold mb-1">المسمى الوظيفي التفصيلي</label>
+                  <input
+                    type="text"
+                    placeholder="مثال: مشرف دورة / تقني بيطري / مسؤول مشتريات"
+                    value={jobTitle}
+                    onChange={(e) => setJobTitle(e.target.value)}
+                    className="w-full bg-stone-950 border border-stone-700 rounded-xl p-2.5 text-stone-100 focus:border-purple-500 focus:outline-none"
+                  />
+                </div>
+
                 <div>
                   <label className="block text-stone-300 font-bold mb-1">البريد الإلكتروني (اختياري)</label>
                   <input
@@ -739,6 +763,23 @@ export const UsersView: React.FC<UsersViewProps> = ({ onNavigate }) => {
                     );
                   })}
                 </div>
+              </div>
+
+              <div className="p-3.5 bg-stone-950/60 rounded-xl border border-stone-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-black text-sky-300 text-xs flex items-center gap-1.5"><Building2 className="w-3.5 h-3.5" />العنابر المصرح بها</h4>
+                  <button type="button" onClick={() => { setAllHangarsSelected(true); setAllowedHangarIds([]); }} className={`px-2.5 py-1 rounded-lg text-[11px] font-bold ${allHangarsSelected ? 'bg-sky-500 text-stone-950' : 'bg-stone-800 text-stone-300'}`}>كل العنابر</button>
+                </div>
+                <p className="text-[10px] text-stone-500">اتركها على «كل العنابر» للسماح بجميع عنابر المزارع المختارة.</p>
+                {!allFarmsSelected && <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {farms.filter(farm => allowedFarmIds.includes(farm.id)).flatMap(farm => Array.from({ length: farm.barnsCount || farm.hangarsCount || 0 }, (_, index) => ({ farm, index }))).map(({ farm, index }) => {
+                    const hangarId = `${farm.id}:barn-${index + 1}`;
+                    const selected = allHangarsSelected || allowedHangarIds.includes(hangarId);
+                    return <label key={hangarId} className={`p-2 rounded-lg border text-xs font-bold cursor-pointer ${selected ? 'border-sky-500/40 bg-sky-500/10 text-sky-200' : 'border-stone-800 text-stone-500'}`}>
+                      <input type="checkbox" checked={selected} onChange={() => { setAllHangarsSelected(false); setAllowedHangarIds(prev => prev.includes(hangarId) ? prev.filter(id => id !== hangarId) : [...prev, hangarId]); }} className="ml-1" />{farm.name} — عنبر {index + 1}
+                    </label>;
+                  })}
+                </div>}
               </div>
 
               {/* Granular Permissions Checkboxes */}

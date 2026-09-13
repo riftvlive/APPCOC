@@ -1,10 +1,10 @@
 import { Farm, PoultryCycle, ChickPurchase, FeedPurchase, MedicationPurchase, Expense, WholesaleSale, Partner, Worker, WorkerTransaction, CashAccount, FinancialTransaction, DailyLog, AuditLogEntry, AppNotification, User } from '../types';
 
 export const INITIAL_USERS: User[] = [
-  { id: 'usr-1', name: 'الحاج عثمان الإدريسي', phone: '0661122334', role: 'admin' },
-  { id: 'usr-2', name: 'رشيد العمراني (مدير مزرعة 1)', phone: '0662233445', role: 'farm_manager', allowedFarmIds: ['farm-1'] },
-  { id: 'usr-3', name: 'ياسين بنسالم (المحاسب)', phone: '0663344556', role: 'accountant' },
-  { id: 'usr-4', name: 'حمزة التازي (مشرف عنبر)', phone: '0664455667', role: 'worker', allowedFarmIds: ['farm-1', 'farm-2'] }
+  { id: 'usr-1', name: 'المدير العام', phone: '0610187970', pin: '7970', role: 'admin', status: 'active' },
+  { id: 'usr-2', name: 'رشيد العمراني (مدير مزرعة 1)', phone: '0662233445', pin: '1234', role: 'farm_manager', allowedFarmIds: ['farm-1'], status: 'active' },
+  { id: 'usr-3', name: 'ياسين بنسالم (المحاسب)', phone: '0663344556', pin: '1234', role: 'accountant', status: 'active' },
+  { id: 'usr-4', name: 'حمزة التازي (مشرف عنبر)', phone: '0664455667', pin: '1234', role: 'worker', allowedFarmIds: ['farm-1', 'farm-2'], allowedHangarIds: ['farm-1:barn-1', 'farm-1:barn-2', 'farm-2:barn-1'], status: 'active' }
 ];
 
 export const INITIAL_FARMS: Farm[] = [
@@ -138,102 +138,135 @@ export const INITIAL_DAILY_LOGS: DailyLog[] = [
 ];
 
 export const INITIAL_PARTNERS: Partner[] = [
-  // Suppliers
   {
     id: 'part-sup-1',
     name: 'شركة أعلاف الغرب المتحدة',
-    companyName: 'الغرب فيد للإنتاج الفلاحي (S.A)',
-    phone: '0537889900',
-    address: 'المنطقة الصناعية القنيطرة',
+    companyName: 'أعلاف الغرب - القنيطرة',
+    phone: '0537334455',
+    address: 'المنطقة الصناعية - القنيطرة',
     type: 'supplier',
-    activityType: 'أعلاف الدواجن المركبة (بادي، نامي، ناهي)',
-    openingBalance: 0,
-    notes: 'مورد معتمد للأعلاف عالية الجودة مع تسهيلات في الدفع 30 يوماً.',
-    createdAt: '2025-01-15'
+    activityType: 'أعلاف الدواجن المركبة',
+    openingBalance: -289150,
+    notes: 'المورد الرئيسي لعلف الدواجن (بادي، نمو، إنهاء).',
+    createdAt: '2026-05-01'
   },
   {
     id: 'part-sup-2',
     name: 'مختبرات الأطلس البيطرية',
-    companyName: 'أطلس فارما فيت',
-    phone: '0522445566',
-    address: 'شارع الجيش الملكي، الدار البيضاء',
+    companyName: 'Laboratoires Vétérinaires Atlas',
+    phone: '0537667788',
+    address: 'شارع الحسن الثاني، الرباط',
     type: 'supplier',
-    activityType: 'أدوية ولقاحات ومطهرات بيطرية',
-    openingBalance: 0,
-    notes: 'توفير برامج التحصين والمتابعة الصحية الدورية.',
-    createdAt: '2025-01-20'
+    activityType: 'أدوية ولقاحات بيطرية',
+    openingBalance: -4800,
+    notes: 'توفير برامج اللقاحات والمضادات الحيوية والمكملات الغذائية.',
+    createdAt: '2026-05-01'
   },
   {
     id: 'part-sup-3',
     name: 'مفرخات الأطلس الممتازة',
-    companyName: 'الأطلس أكوفارم للتفريخ',
-    phone: '0535667788',
-    address: 'طريق فاس - مكناس',
+    companyName: 'Couvoirs Atlas Maroc',
+    phone: '0522889900',
+    address: 'طريق الدار البيضاء - برشيد',
     type: 'supplier',
-    activityType: 'كتاكيت عمر يوم واحد (Cobb & Ross)',
-    openingBalance: 0,
-    notes: 'كتاكيت مختارة ذات أوزان وحيوية ممتازة.',
-    createdAt: '2025-02-01'
+    activityType: 'تفريخ وكتاكيت يوم واحد',
+    openingBalance: -131850,
+    notes: 'توفير كتاكيت Cobb 500 و Ross 308 بأعلى حيوية.',
+    createdAt: '2026-05-01'
   },
   {
     id: 'part-sup-4',
-    name: 'شركة محروقات الشاوية والغاز',
-    companyName: 'غاز أوريكس للتوزيع',
-    phone: '0523332211',
-    address: 'برشيد',
+    name: 'محطة الوفاق للمحروقات وتوزيع الغاز',
+    companyName: 'Afriquia / Gaz Wifaq',
+    phone: '0537554433',
+    address: 'طريق الخميسات - تيفلت',
     type: 'supplier',
-    activityType: 'غاز التدفئة والمحروقات للمولدات',
+    activityType: 'غاز التدفئة والمحروقات',
     openingBalance: 0,
-    createdAt: '2025-02-10'
+    notes: 'تزويد المزارع بقنينات غاز التدفئة للتحضين والغازوال للمولد.',
+    createdAt: '2026-05-01'
   },
-
-  // Customers
+  {
+    id: 'part-sup-5',
+    name: 'مؤسسة النجارة البيضاوية لفرشة الدواجن',
+    companyName: 'نجارة الأطلس - عين السبع',
+    phone: '0522338899',
+    address: 'الدار البيضاء',
+    type: 'supplier',
+    activityType: 'نشارة خشب بيضاء معقمة',
+    openingBalance: 0,
+    notes: 'توريد نجارة الخشب الخالية من الغبار والرطوبة.',
+    createdAt: '2026-05-01'
+  },
   {
     id: 'part-cust-1',
-    name: 'محمد التاجي (تاجر سوق الجملة)',
-    companyName: 'مؤسسة التاجي للدواجن بالجملة',
-    phone: '0661445566',
-    address: 'سوق الجملة للدواجن، البيضاء',
+    name: 'محمد التاجي (تاجر دواجن - الرباط وسلا)',
+    companyName: 'مؤسسة التاجي لتوزيع الدواجن',
+    phone: '0661223344',
+    address: 'سوق الجملة للدواجن - يعقوب المنصور، الرباط',
     type: 'customer',
-    activityType: 'تاجر جملة وتوزيع الدجاج الحي',
-    openingBalance: 0,
-    notes: 'زبون دائم يشتري كميات كبيرة بشاحنات مبردة.',
-    createdAt: '2025-03-01'
+    activityType: 'توزيع دجاج حي بالجملة',
+    openingBalance: 43600,
+    notes: 'زبون رئيسي منتظم بشاحنات نقل مخصصة.',
+    createdAt: '2026-06-01'
   },
   {
     id: 'part-cust-2',
     name: 'شركة مجازر الأطلس العصرية',
-    companyName: 'مذابح الأطلس الصناعية (SARL)',
-    phone: '0537665544',
-    address: 'المنطقة الصناعية سيدي بوقنادل سلا',
+    companyName: "Abattoirs Modernes de l'Atlas",
+    phone: '0522776655',
+    address: 'عين السبع - الدار البيضاء',
     type: 'customer',
-    activityType: 'مجزرة صناعية وتوزيع الدواجن المذبوحة',
+    activityType: 'مجازر دواجن صناعية معتمدة',
     openingBalance: 0,
-    notes: 'دفع نصف المبلغ نقداً والباقي شيك لأجل 15 يوماً.',
-    createdAt: '2025-03-15'
+    notes: 'تسديد فوري عبر تحويلات بنكية مصدقة.',
+    createdAt: '2026-06-01'
   },
   {
     id: 'part-cust-3',
-    name: 'يوسف بوعزة (موزع الرباط وتمارة)',
-    companyName: 'محلات بوعزة لتجارة اللحوم البيضاء',
-    phone: '0663778899',
-    address: 'حي يعقوب المنصور، الرباط',
+    name: 'يوسف بوعزة (موزع دجاج جملة - القنيطرة)',
+    companyName: 'محلات بوعزة للدواجن والبيض',
+    phone: '0663445566',
+    address: 'سوق أولاد وجيه، القنيطرة',
     type: 'customer',
-    activityType: 'موزع محلي لمتاجر البيع بالتقسيط',
-    openingBalance: 0,
-    createdAt: '2025-04-10'
+    activityType: 'تاجر نصف جملة وتقسيط',
+    openingBalance: 44000,
+    notes: 'مشتريات دورية بمعدل 4 إلى 5 أطنان لكل دفعة.',
+    createdAt: '2026-06-01'
   },
   {
     id: 'part-cust-4',
-    name: 'الحاج عبد الله السوسي',
-    companyName: 'السوسي للتجارة العامة',
-    phone: '0668991122',
-    address: 'سوق الصالحين، سلا',
+    name: 'الحاج عبد الله السوسي (سوق الجملة الدار البيضاء)',
+    companyName: 'مؤسسة السوسي لتجارة الطيور الحية',
+    phone: '0661778899',
+    address: 'سوق الجملة للدواجن - الحي المحمدي، كازا',
     type: 'customer',
-    activityType: 'تاجر دواجن بالجملة',
-    openingBalance: 0,
-    createdAt: '2025-05-05'
-  }
+    activityType: 'تاجر جملة كبير (كراش)',
+    openingBalance: 42000,
+    notes: 'شحن شاحنات كبرى (رموك) بأسعار الجملة اليومية.',
+    createdAt: '2026-08-01'
+  },
+  {
+    id: 'part-cust-5',
+    name: 'عبد الرزاق الفاسي (سوق الجملة فاس ومكناس)',
+    companyName: 'موزع دواجن فاس سايس',
+    phone: '0661339922',
+    address: 'سوق الدواجن بنسودة، فاس',
+    type: 'customer',
+    activityType: 'توزيع دجاج حي ونصف جملة',
+    openingBalance: 25000,
+    notes: 'توزيع في أسواق جهة فاس مكناس ومطاعم شواء.',
+    createdAt: '2026-08-01'
+  },
+  { id: 'part-sup-zalar', name: 'Zalar Holding - El Alf', companyName: 'El Alf / Alf Al Maghrib', phone: '0522334455', address: 'المغرب', type: 'supplier', activityType: 'أعلاف الدواجن المركبة', openingBalance: 0, notes: 'مجموعة مغربية تنشط في أعلاف الدواجن.', createdAt: '2026-08-31' },
+  { id: 'part-sup-atlas-feed', name: 'Agro Industrielle Al Atlas', companyName: 'Alf Al Maghrib', phone: '0522445566', address: 'المغرب', type: 'supplier', activityType: 'أعلاف الدواجن والماشية', openingBalance: 0, createdAt: '2026-08-31' },
+  { id: 'part-sup-feed-food', name: 'Feed & Food Additifs', companyName: 'Feed & Food Additifs', phone: '0522556677', address: 'المغرب', type: 'supplier', activityType: 'Premix وإضافات الأعلاف', openingBalance: 0, createdAt: '2026-08-31' },
+  { id: 'part-sup-provimac', name: 'PROVIMAC', companyName: 'Provimac', phone: '0522667788', address: 'المغرب', type: 'supplier', activityType: 'أعلاف متوازنة للدواجن والماشية', openingBalance: 0, createdAt: '2026-08-31' },
+  { id: 'part-sup-alf-sahel', name: 'ALF SAHEL', companyName: 'Alf Sahel', phone: '0522778899', address: 'Had Soualem, Maroc', type: 'supplier', activityType: 'أعلاف مركبة للحيوانات والدواجن', openingBalance: 0, createdAt: '2026-08-31' },
+  { id: 'part-sup-snv', name: 'S.N.V. - Société Nouvelle de Volailles', companyName: 'S.N.V.', phone: '0537889900', address: 'تمارة، المغرب', type: 'supplier', activityType: 'أعلاف وكتاكيت لاحم وبياض', openingBalance: 0, createdAt: '2026-08-31' },
+  { id: 'part-sup-atlas-couvoirs', name: 'Atlas Couvoirs / CouvNord', companyName: 'Zalar Holding', phone: '0539112233', address: 'المغرب', type: 'supplier', activityType: 'تفريخ وكتاكيت لاحم وداندون', openingBalance: 0, createdAt: '2026-08-31' },
+  { id: 'part-sup-soprina', name: 'SOPRINA / EURAFRIC', companyName: 'Soprina - Eurafric', phone: '0522223344', address: 'المغرب', type: 'supplier', activityType: 'كتاكيت لاحم وبيض التفريخ', openingBalance: 0, createdAt: '2026-08-31' },
+  { id: 'part-sup-ouakkaha', name: 'مجموعة OUAKKAHA', companyName: 'Groupe Ouakkaha', phone: '0522114477', address: 'المغرب', type: 'supplier', activityType: 'تفريخ وكتاكيت وبيض للتفريخ', openingBalance: 0, createdAt: '2026-08-31' }
 ];
 
 export const INITIAL_ACCOUNTS: CashAccount[] = [

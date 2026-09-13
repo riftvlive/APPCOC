@@ -32,15 +32,26 @@ export const FinanceView: React.FC<FinanceViewProps> = ({ onOpenQuickAction, def
     transactions,
     farms,
     cycles,
+    sales,
+    chickPurchases,
+    feedPurchases,
+    medicationPurchases,
+    expenses,
     currency,
     language,
     addAccountTransfer,
-    addAccount
+    addAccount,
+    addSettlementTransaction
   } = useFarm();
 
   const [activeSubTab, setActiveSubTab] = useState<'accounts' | 'debts' | 'transactions'>(defaultSubTab);
   const [isTransferModalOpen, setIsTransferModalOpen] = useState(false);
   const [isAddAccountModalOpen, setIsAddAccountModalOpen] = useState(false);
+  const [settlementType, setSettlementType] = useState<'customer' | 'supplier'>('customer');
+  const [settlementPartnerId, setSettlementPartnerId] = useState('');
+  const [settlementAmount, setSettlementAmount] = useState<number | ''>('');
+  const [settlementAccountId, setSettlementAccountId] = useState(accounts[0]?.id || '');
+  const [settlementNotes, setSettlementNotes] = useState('');
 
   // Transfer Form State
   const [xferFrom, setXferFrom] = useState(accounts[0]?.id || '');
@@ -57,6 +68,42 @@ export const FinanceView: React.FC<FinanceViewProps> = ({ onOpenQuickAction, def
 
   // Net Liquid Position
   const netPosition = totalLiquidity + partnerBalances.totalReceivables - partnerBalances.totalPayables;
+  const settlementPartner = partners.find(p => p.id === settlementPartnerId);
+  const settlementItems = settlementType === 'customer'
+    ? sales.filter(s => s.customerId === settlementPartnerId && s.remainingAmount > 0).map(s => ({ id: s.id, date: s.date, label: `فاتورة بيع ${s.invoiceNumber}`, amount: s.netTotal, remaining: s.remainingAmount }))
+    : [
+        ...chickPurchases.filter(p => p.supplierId === settlementPartnerId && p.remainingAmount > 0).map(p => ({ id: p.id, date: p.date, label: `كتاكيت • ${p.invoiceNumber}`, amount: p.totalAmount, remaining: p.remainingAmount })),
+        ...feedPurchases.filter(p => p.supplierId === settlementPartnerId && p.remainingAmount > 0).map(p => ({ id: p.id, date: p.date, label: `علف • ${p.invoiceNumber || p.brand}`, amount: p.totalAmount, remaining: p.remainingAmount })),
+        ...medicationPurchases.filter(p => p.supplierId === settlementPartnerId && p.remainingAmount > 0).map(p => ({ id: p.id, date: p.date, label: `دواء/لقاح • ${p.medicationName}`, amount: p.totalAmount, remaining: p.remainingAmount })),
+        ...expenses.filter(e => e.supplierId === settlementPartnerId && e.remainingAmount > 0).map(e => ({ id: e.id, date: e.date, label: `مصروف • ${e.description}`, amount: e.amount, remaining: e.remainingAmount }))
+      ];
+  const ledgerOutstanding = settlementType === 'customer'
+    ? ((partnerBalances.customerReceivables[settlementPartnerId] as any)?.remainingDue)
+    : ((partnerBalances.supplierPayables[settlementPartnerId] as any)?.remainingDebt);
+  const settlementOutstanding = Math.max(0, Math.round((ledgerOutstanding ?? settlementItems.reduce((sum, item) => sum + item.remaining, 0)) * 100) / 100);
+
+  const openSettlement = (type: 'customer' | 'supplier', partnerId: string) => {
+    setSettlementType(type);
+    setSettlementPartnerId(partnerId);
+    setSettlementAmount('');
+    setSettlementNotes('');
+  };
+
+  const handleSettlementSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    const amount = Number(settlementAmount || 0);
+    if (!settlementPartnerId || amount <= 0 || amount - settlementOutstanding > 0.005 || !settlementAccountId) return;
+    const itemText = settlementItems.length > 0 ? ` — ${settlementItems.map(item => item.label).join('، ')}` : '';
+    addSettlementTransaction({
+      partnerId: settlementPartnerId,
+      amount,
+      type: settlementType === 'customer' ? 'customer_payment' : 'supplier_payment',
+      accountId: settlementAccountId,
+      paymentMethod: settlementType === 'customer' ? 'cash' : 'bank_transfer',
+      description: settlementNotes || `${settlementType === 'customer' ? 'تحصيل من' : 'سداد إلى'} ${settlementPartner?.name || ''}${itemText}`
+    });
+    setSettlementPartnerId('');
+  };
 
   const handleTransferSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,7 +180,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({ onOpenQuickAction, def
           <div>
             <h1 className="text-xl font-black text-stone-900">تقرير الخزينة المركزية والموقف المالي</h1>
             <p className="text-xs text-stone-600">
-              نظام إدارة مزارع الدواجن • تاريخ الاستخراج: {new Date().toLocaleDateString('ar-MA')} - {new Date().toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' })}
+              مزارعنا لإدارة مزارع الدواجن • تاريخ الاستخراج: {new Date().toLocaleDateString('ar-MA')} - {new Date().toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' })}
             </p>
           </div>
           <div className="text-left text-xs text-stone-700 font-semibold">
@@ -324,7 +371,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({ onOpenQuickAction, def
                       <div className="text-right">
                         <span className="font-black text-emerald-400 block">{due.toLocaleString()} {currency}</span>
                         <button
-                          onClick={() => onOpenQuickAction('collect')}
+                          onClick={() => openSettlement('customer', pId)}
                           className="text-[10px] text-teal-300 hover:text-teal-200 font-bold underline"
                         >
                           تحصيل الآن
@@ -368,7 +415,7 @@ export const FinanceView: React.FC<FinanceViewProps> = ({ onOpenQuickAction, def
                       <div className="text-right">
                         <span className="font-black text-rose-400 block">{debt.toLocaleString()} {currency}</span>
                         <button
-                          onClick={() => onOpenQuickAction('supplier_pay')}
+                          onClick={() => openSettlement('supplier', pId)}
                           className="text-[10px] text-rose-300 hover:text-rose-200 font-bold underline"
                         >
                           سداد دفعة
@@ -569,6 +616,45 @@ export const FinanceView: React.FC<FinanceViewProps> = ({ onOpenQuickAction, def
               >
                 حفظ الحساب
               </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {settlementPartnerId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="fixed inset-0 bg-stone-950/80 backdrop-blur-sm" onClick={() => setSettlementPartnerId('')} />
+          <div className="relative w-full max-w-lg bg-stone-900 border border-stone-700 rounded-2xl shadow-2xl overflow-hidden z-10">
+            <div className="p-4 bg-stone-800 border-b border-stone-700 flex items-center justify-between">
+              <div>
+                <h3 className="font-extrabold text-sm text-stone-100">{settlementType === 'customer' ? 'تحصيل من الزبون' : 'سداد للمورد'}</h3>
+                <p className="text-xs text-stone-400 mt-1">{settlementPartner?.name} • الرصيد المستحق: <strong className="text-amber-300">{settlementOutstanding.toLocaleString()} {currency}</strong></p>
+              </div>
+              <button type="button" onClick={() => setSettlementPartnerId('')} className="text-stone-400 hover:text-stone-200"><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={handleSettlementSubmit} className="p-4 space-y-3 text-xs">
+              <div className="rounded-xl bg-stone-950/60 border border-stone-800 p-3 space-y-2">
+                <div className="font-extrabold text-stone-200">الفواتير والعمليات المستحقة</div>
+                {settlementItems.length === 0 ? <div className="text-stone-500">لا توجد فاتورة مفصلة؛ سيتم تسجيلها كتسوية على الرصيد الافتتاحي.</div> : settlementItems.map(item => (
+                  <div key={item.id} className="flex items-center justify-between border-t border-stone-800 pt-2">
+                    <div><div className="text-stone-300 font-semibold">{item.label}</div><div className="text-[10px] text-stone-500">{item.date} • الإجمالي {item.amount.toLocaleString()} {currency}</div></div>
+                    <strong className={settlementType === 'customer' ? 'text-emerald-400' : 'text-rose-400'}>{item.remaining.toLocaleString()} {currency}</strong>
+                  </div>
+                ))}
+              </div>
+              <div>
+                <label className="block text-stone-300 font-bold mb-1">مبلغ العملية ({currency}) *</label>
+                <div className="flex gap-2">
+                  <input type="number" required min="0.01" max={settlementOutstanding} step="0.01" value={settlementAmount} onChange={e => setSettlementAmount(e.target.value === '' ? '' : Number(e.target.value))} placeholder={`الحد الأقصى ${settlementOutstanding.toFixed(2)}`} className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2.5 text-base font-bold text-amber-300" />
+                  <button type="button" onClick={() => setSettlementAmount(settlementOutstanding)} className="shrink-0 px-3 rounded-lg bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 font-bold">كامل</button>
+                </div>
+              </div>
+              <div>
+                <label className="block text-stone-300 font-bold mb-1">إلى الحساب / من الحساب</label>
+                <select value={settlementAccountId} onChange={e => setSettlementAccountId(e.target.value)} className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100">{accounts.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}</select>
+              </div>
+              <input type="text" value={settlementNotes} onChange={e => setSettlementNotes(e.target.value)} placeholder="ملاحظة أو رقم الشيك/الحوالة" className="w-full bg-stone-800 border border-stone-700 rounded-lg p-2 text-stone-100" />
+              <button type="submit" className={`w-full py-2.5 ${settlementType === 'customer' ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-rose-600 hover:bg-rose-500'} text-white font-extrabold rounded-xl shadow-md transition`}>{settlementType === 'customer' ? 'تأكيد التحصيل' : 'تأكيد السداد'}</button>
             </form>
           </div>
         </div>

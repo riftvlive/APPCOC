@@ -3,18 +3,18 @@ import {
   Building2,
   Bell,
   Search,
-  Globe,
-  UserCheck,
   Wifi,
   WifiOff,
-  CheckCircle2,
-  X,
   AlertTriangle,
   Info,
-  ChevronDown
+  CheckCircle2,
+  Check,
+  Database,
+  Baby,
+  Wheat,
+  Plus
 } from 'lucide-react';
 import { useFarm } from '../../context/FarmContext';
-import { UserRole } from '../../types';
 
 interface HeaderProps {
   onOpenSearch: () => void;
@@ -28,108 +28,213 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSearch, activeTab, setActi
     selectedFarmId,
     setSelectedFarmId,
     currentUser,
-    setCurrentUser,
-    users,
     notifications,
     markNotificationAsRead,
     clearAllNotifications,
     language,
     setLanguage,
-    isOnline
+    dataSource,
+    isFarmAllowed,
+    totalActiveBirds,
+    chickPurchases,
+    feedPurchases,
+    feedMovements,
+    feedSales
   } = useFarm();
 
   const [showNotifications, setShowNotifications] = useState(false);
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
 
   const unreadNotifs = notifications.filter(n => !n.isRead);
+  const visibleFarms = farms.filter(farm => isFarmAllowed(farm.id));
+  const canSeeAllFarms = currentUser.role === 'admin' || (!currentUser.allowedFarmIds || currentUser.allowedFarmIds.length === 0);
 
-  const getRoleLabel = (role: UserRole) => {
-    switch (role) {
-      case 'admin': return language === 'ar' ? 'المدير العام' : 'Administrateur';
-      case 'farm_manager': return language === 'ar' ? 'مدير مزرعة' : 'Chef de Ferme';
-      case 'accountant': return language === 'ar' ? 'المحاسب' : 'Comptable';
-      case 'worker': return language === 'ar' ? 'مشرف / عامل' : 'Ouvrier / Superviseur';
-      default: return role;
+  // Determine current active main area
+  const currentArea: 'chicks' | 'farms' | 'feed' =
+    activeTab.startsWith('chicks')
+      ? 'chicks'
+      : (activeTab.startsWith('feed') || activeTab === 'feed-meds' || activeTab === 'feed_meds')
+        ? 'feed'
+        : 'farms';
+
+  // Stats for the 3 apps
+  const totalChicks = chickPurchases.reduce((sum, p) => sum + (p.quantityReceived || p.quantityOrdered || 0), 0);
+  const totalFeedTonnes = (
+    feedPurchases.reduce((acc, p) => acc + (p.weightKg || p.quantityBags * 50), 0) -
+    feedMovements.filter(m => m.type === 'issue' || m.type === 'waste').reduce((acc, m) => acc + m.weightKg, 0) -
+    feedSales.reduce((acc, s) => acc + s.weightKg, 0)
+  ) / 1000;
+
+  // Header dynamic theme configuration based on active area
+  const themeConfig = {
+    chicks: {
+      border: 'border-b-2 border-amber-500/60 shadow-amber-950/30',
+      brandBg: 'bg-amber-500 text-stone-950',
+      brandIcon: Baby,
+      title: language === 'ar' ? 'الكتاكيت' : 'Poussins',
+      tag: language === 'ar' ? 'إدارة الكتاكيت' : 'Poussins',
+      accentText: 'text-amber-400',
+      activeTabClass: 'bg-amber-500 text-stone-950 font-black shadow-lg shadow-amber-500/20 border-amber-400',
+      badge: `${totalChicks.toLocaleString()} كتكوت`
+    },
+    farms: {
+      border: 'border-b-2 border-emerald-500/60 shadow-emerald-950/30',
+      brandBg: 'bg-emerald-500 text-stone-950',
+      brandIcon: Building2,
+      title: language === 'ar' ? 'المزارع' : 'Fermes',
+      tag: language === 'ar' ? 'إدارة المزارع' : 'Fermes',
+      accentText: 'text-emerald-400',
+      activeTabClass: 'bg-emerald-500 text-stone-950 font-black shadow-lg shadow-emerald-500/20 border-emerald-400',
+      badge: `${totalActiveBirds.toLocaleString()} طائر`
+    },
+    feed: {
+      border: 'border-b-2 border-yellow-500/60 shadow-yellow-950/30',
+      brandBg: 'bg-yellow-500 text-stone-950',
+      brandIcon: Wheat,
+      title: language === 'ar' ? 'العلف' : 'Aliments',
+      tag: language === 'ar' ? 'إدارة العلف' : 'Aliments',
+      accentText: 'text-yellow-400',
+      activeTabClass: 'bg-yellow-500 text-stone-950 font-black shadow-lg shadow-yellow-500/20 border-yellow-400',
+      badge: `${Math.max(0, totalFeedTonnes).toFixed(1)} طن`
     }
-  };
+  }[currentArea];
+
+  const CurrentBrandIcon = themeConfig.brandIcon;
 
   return (
-    <header className="sticky top-0 z-40 bg-stone-900 text-stone-100 border-b border-stone-800 shadow-md">
-      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-2">
-        {/* Brand & Farm Switcher */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-amber-500 flex items-center justify-center text-stone-950 font-bold shadow-inner">
-              <span className="text-xl">🐔</span>
+    <header className={`sticky top-0 z-40 bg-stone-900 text-stone-100 ${themeConfig.border} shadow-md transition-all duration-300`}>
+      <div className="w-full mx-auto px-2 sm:px-6 py-2.5 flex flex-col md:flex-row items-center justify-between gap-2.5">
+        
+        {/* Left: Dynamic Brand Identity & Contextual Switcher */}
+        <div className="flex items-center justify-between md:justify-start w-full md:w-auto gap-2 sm:gap-3 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className={`w-10 h-10 rounded-xl ${themeConfig.brandBg} flex items-center justify-center font-bold shadow-md transition-all duration-300`}>
+              <CurrentBrandIcon className="w-5 h-5" />
             </div>
-            <div className="hidden sm:block">
-              <h1 className="text-base font-extrabold tracking-tight leading-tight text-white">
-                {language === 'ar' ? 'مزارعنا للدواجن' : 'AvicoGestion ERP'}
-              </h1>
-              <p className="text-[11px] text-amber-400 font-medium">
-                {language === 'ar' ? 'نظام إدارة مزارع التسمين المتكامل' : 'Système Avicole Intégré'}
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-base font-black tracking-tight leading-tight text-white">
+                  {themeConfig.title}
+                </h1>
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full bg-stone-800 ${themeConfig.accentText} border border-stone-700`}>
+                  {themeConfig.badge}
+                </span>
+              </div>
+              <p className="text-[10px] text-stone-400 font-medium">
+                {themeConfig.tag}
               </p>
             </div>
           </div>
 
-          {/* Farm Filter Dropdown */}
-          <div className="relative">
-            <div className="flex items-center bg-stone-800/90 hover:bg-stone-700/90 border border-stone-700 text-xs rounded-lg px-2.5 py-1.5 transition-colors">
-              <Building2 className="w-3.5 h-3.5 text-amber-400 ml-1.5 shrink-0" />
-              <select
-                id="farm-filter-select"
-                aria-label="تصفية المزرعة"
-                value={selectedFarmId}
-                onChange={(e) => setSelectedFarmId(e.target.value)}
-                className="bg-transparent text-stone-200 text-xs font-semibold focus:outline-none cursor-pointer pr-1"
-              >
-                <option value="all" className="bg-stone-800 text-stone-100">
-                  {language === 'ar' ? '🏢 كل المزارع (النشاط بالكامل)' : '🏢 Toutes les fermes'}
-                </option>
-                {farms.map((f) => (
-                  <option key={f.id} value={f.id} className="bg-stone-800 text-stone-100">
-                    📍 {f.name}
+          {/* Farm Switcher when in Farm mode */}
+          {currentArea === 'farms' && (
+            <div className="relative min-w-0">
+              <div className="flex items-center max-w-[150px] sm:max-w-none bg-stone-800/90 hover:bg-stone-700/90 border border-emerald-500/30 text-xs rounded-lg px-2 py-1 transition-colors">
+                <Building2 className="w-3.5 h-3.5 text-emerald-400 ml-1.5 shrink-0" />
+                <select
+                  id="farm-filter-select"
+                  aria-label="تصفية المزرعة"
+                  value={selectedFarmId}
+                  onChange={(e) => setSelectedFarmId(e.target.value)}
+                  className="bg-transparent text-stone-200 text-xs font-semibold focus:outline-none cursor-pointer pr-1 max-w-[110px] sm:max-w-none truncate"
+                >
+                  {canSeeAllFarms && <option value="all" className="bg-stone-800 text-stone-100">
+                    {language === 'ar' ? '🏢 كل المزارع والمخازن' : '🏢 Toutes les fermes'}
+                  </option>}
+                  <option value="central" className="bg-stone-800 text-amber-300 font-bold">
+                    🏢 {language === 'ar' ? 'المخزن العام (المركزي)' : 'Dépôt Central'}
                   </option>
-                ))}
-              </select>
+                  {visibleFarms.map((f) => (
+                    <option key={f.id} value={f.id} className="bg-stone-800 text-stone-100">
+                      📍 {f.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
-        {/* Right Tools: Sync status, Search, Notifications, Language, User/Role */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5">
+        {/* Center: The 3 Main Cloud Apps Header Switcher */}
+        <div className="flex items-center justify-center gap-1 sm:gap-2 p-1 bg-stone-950/90 border border-stone-800 rounded-xl shadow-inner w-full md:w-auto max-w-md mx-auto">
+          {/* 1. Chicks App */}
+          <button
+            id="header-tab-chicks"
+            onClick={() => setActiveTab('chicks')}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 sm:px-5 py-2 rounded-lg text-xs transition-all duration-200 border ${
+              currentArea === 'chicks'
+                ? 'bg-amber-500 text-stone-950 font-black shadow-lg shadow-amber-500/20 border-amber-400 scale-[1.02]'
+                : 'text-stone-400 hover:text-stone-200 border-transparent hover:bg-stone-800/60'
+            }`}
+          >
+            <Baby className="w-4 h-4" />
+            <span>{language === 'ar' ? 'الكتاكيت' : 'Poussins'}</span>
+          </button>
+
+          {/* 2. Farms App */}
+          <button
+            id="header-tab-farms"
+            onClick={() => setActiveTab('dashboard')}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 sm:px-5 py-2 rounded-lg text-xs transition-all duration-200 border ${
+              currentArea === 'farms'
+                ? 'bg-emerald-500 text-stone-950 font-black shadow-lg shadow-emerald-500/20 border-emerald-400 scale-[1.02]'
+                : 'text-stone-400 hover:text-stone-200 border-transparent hover:bg-stone-800/60'
+            }`}
+          >
+            <Building2 className="w-4 h-4" />
+            <span>{language === 'ar' ? 'المزارع' : 'Fermes'}</span>
+          </button>
+
+          {/* 3. Feed App */}
+          <button
+            id="header-tab-feed"
+            onClick={() => setActiveTab('feed-meds')}
+            className={`flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 sm:px-5 py-2 rounded-lg text-xs transition-all duration-200 border ${
+              currentArea === 'feed'
+                ? 'bg-yellow-500 text-stone-950 font-black shadow-lg shadow-yellow-500/20 border-yellow-400 scale-[1.02]'
+                : 'text-stone-400 hover:text-stone-200 border-transparent hover:bg-stone-800/60'
+            }`}
+          >
+            <Wheat className="w-4 h-4" />
+            <span>{language === 'ar' ? 'العلف' : 'Aliments'}</span>
+          </button>
+        </div>
+
+        {/* Right Tools: Sync status, Search, Notifications, Language */}
+        <div className="hidden sm:flex items-center gap-1.5 sm:gap-2 shrink-0">
+          
           {/* Online/Offline Status */}
           <div
-            className={`hidden md:flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-medium border ${
-              isOnline
+            className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-medium border ${
+              dataSource === 'server'
                 ? 'bg-emerald-950/60 text-emerald-300 border-emerald-800'
                 : 'bg-amber-950/60 text-amber-300 border-amber-800'
             }`}
-            title={isOnline ? 'متصل بالسحابة - المزامنة نشطة' : 'وضع غير متصل - يتم الحفظ محلياً'}
+            title={dataSource === 'server' ? 'الخادم: البيانات متزامنة ومحملة مباشرة' : 'أوفلاين: يتم استخدام النسخة المحلية'}
+            aria-label={dataSource === 'server' ? 'الخادم متصل' : 'وضع أوفلاين'}
           >
-            {isOnline ? <Wifi className="w-3 h-3 text-emerald-400" /> : <WifiOff className="w-3 h-3 text-amber-400" />}
-            <span>{isOnline ? (language === 'ar' ? 'متصل' : 'En ligne') : (language === 'ar' ? 'أوفلاين' : 'Hors ligne')}</span>
+            {dataSource === 'server' ? <Wifi className="w-3.5 h-3.5 text-emerald-400" /> : <WifiOff className="w-3.5 h-3.5 text-amber-400" />}
           </div>
 
           {/* Auto Backup Vault Quick Chip */}
-          <button
-            onClick={() => setActiveTab('audit_backup')}
-            className="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold border bg-stone-800/80 hover:bg-stone-700 text-stone-300 border-stone-700 cursor-pointer transition"
-            title="النسخ الاحتياطي التلقائي وقواعد البيانات"
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[10px] text-stone-300">النسخ التلقائي: نشط</span>
-          </button>
+          {currentUser.role === 'admin' && (
+            <button
+              onClick={() => setActiveTab('audit_backup')}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold border bg-stone-800/80 hover:bg-stone-700 text-stone-300 border-stone-700 cursor-pointer transition active:scale-95"
+              title="النسخ التلقائي نشط — فتح النسخ الاحتياطي وقواعد البيانات"
+              aria-label="النسخ التلقائي نشط"
+            >
+              <Database className="w-3.5 h-3.5 text-emerald-400" />
+            </button>
+          )}
 
           {/* Universal Search Button */}
           <button
             id="header-search-btn"
             onClick={onOpenSearch}
             className="flex items-center gap-1.5 bg-stone-800 hover:bg-stone-700 text-stone-300 px-2.5 py-1.5 rounded-lg text-xs transition border border-stone-700"
-            title="بحث شامل (مزارع، دورات، زبناء، فواتير)"
+            title="بحث شامل"
           >
             <Search className="w-3.5 h-3.5 text-stone-400" />
-            <span className="hidden lg:inline text-stone-400">{language === 'ar' ? 'بحث سريع...' : 'Recherche...'}</span>
             <kbd className="hidden lg:inline-block text-[10px] bg-stone-900 text-stone-400 px-1.5 py-0.5 rounded border border-stone-700">Ctrl+K</kbd>
           </button>
 
@@ -138,8 +243,10 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSearch, activeTab, setActi
             <button
               id="header-notif-btn"
               onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700 transition"
+              className="relative p-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 border border-stone-700 transition"
               aria-label="الإشعارات"
+              aria-haspopup="dialog"
+              aria-expanded={showNotifications}
             >
               <Bell className="w-4 h-4" />
               {unreadNotifs.length > 0 && (
@@ -151,12 +258,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSearch, activeTab, setActi
 
             {/* Notifications Dropdown Panel */}
             {showNotifications && (
-              <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-80 sm:w-96 bg-stone-900 border border-stone-700 rounded-2xl shadow-2xl z-50 overflow-hidden">
+              <div className="header-popover header-notification-popover fixed top-[4.25rem] left-1/2 -translate-x-1/2 w-[min(20rem,calc(100vw-1rem))] sm:absolute sm:top-auto sm:left-auto sm:right-0 sm:translate-x-0 sm:mt-2 sm:w-96 bg-stone-900 border border-stone-700 rounded-2xl shadow-2xl z-50 overflow-hidden">
                 <div className="p-3.5 bg-stone-800/80 border-b border-stone-700 flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Bell className="w-4 h-4 text-amber-400" />
                     <span className="font-bold text-sm text-stone-100">
-                      {language === 'ar' ? 'التنبيهات والإشعارات' : 'Notifications'}
+                      {language === 'ar' ? 'التنبيهات' : 'Notifications'}
                     </span>
                     <span className="text-xs bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded-full font-semibold">
                       {unreadNotifs.length}
@@ -165,9 +272,12 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSearch, activeTab, setActi
                   {unreadNotifs.length > 0 && (
                     <button
                       onClick={clearAllNotifications}
-                      className="text-xs text-stone-400 hover:text-amber-300 transition"
+                      className="inline-flex items-center gap-1.5 text-xs text-stone-400 hover:text-amber-300 transition active:scale-95"
+                      title="تعليم جميع الإشعارات كمقروءة"
+                      aria-label="تعليم جميع الإشعارات كمقروءة"
                     >
-                      {language === 'ar' ? 'تعليم الكل كمقروء' : 'Tout marquer comme lu'}
+                      <Check className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">{language === 'ar' ? 'تعليم الكل كمقروء' : 'Tout marquer comme lu'}</span>
                     </button>
                   )}
                 </div>
@@ -186,15 +296,20 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSearch, activeTab, setActi
                           if (notif.linkTab) setActiveTab(notif.linkTab);
                           setShowNotifications(false);
                         }}
-                        className={`p-3 text-xs transition cursor-pointer hover:bg-stone-800/60 flex items-start gap-2.5 ${
+                        role="button"
+                        tabIndex={0}
+                        onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { markNotificationAsRead(notif.id); if (notif.linkTab) setActiveTab(notif.linkTab); setShowNotifications(false); } }}
+                        className={`p-3 text-xs transition cursor-pointer hover:bg-stone-800/60 active:scale-[0.99] flex items-start gap-2.5 ${
                           notif.isRead ? 'opacity-60' : 'bg-stone-800/20'
                         }`}
                       >
                         <div className="mt-0.5 shrink-0">
-                          {notif.type === 'danger' && <AlertTriangle className="w-4 h-4 text-rose-500" />}
-                          {notif.type === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-400" />}
-                          {notif.type === 'info' && <Info className="w-4 h-4 text-sky-400" />}
-                          {notif.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+                          <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${notif.type === 'danger' ? 'bg-rose-500/15' : notif.type === 'warning' ? 'bg-amber-500/15' : notif.type === 'info' ? 'bg-sky-500/15' : 'bg-emerald-500/15'}`}>
+                            {notif.type === 'danger' && <AlertTriangle className="w-4 h-4 text-rose-500" />}
+                            {notif.type === 'warning' && <AlertTriangle className="w-4 h-4 text-amber-400" />}
+                            {notif.type === 'info' && <Info className="w-4 h-4 text-sky-400" />}
+                            {notif.type === 'success' && <CheckCircle2 className="w-4 h-4 text-emerald-400" />}
+                          </div>
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="font-bold text-stone-200 mb-0.5">{notif.title}</div>
@@ -213,75 +328,13 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSearch, activeTab, setActi
           <button
             id="header-lang-toggle"
             onClick={() => setLanguage(language === 'ar' ? 'fr' : 'ar')}
-            className="flex items-center gap-1 bg-stone-800 hover:bg-stone-700 text-stone-300 px-2 py-1.5 rounded-lg text-xs font-bold transition border border-stone-700"
-            title="تغيير اللغة / Changer la langue"
+            className="flex items-center justify-center bg-stone-800 hover:bg-stone-700 text-stone-300 w-8 h-8 rounded-lg text-base transition border border-stone-700 active:scale-95"
+            title={language === 'ar' ? 'التبديل إلى الفرنسية' : 'Passer à l’arabe'}
+            aria-label={language === 'ar' ? 'التبديل إلى الفرنسية' : 'Passer à l’arabe'}
           >
-            <Globe className="w-3.5 h-3.5 text-amber-400" />
-            <span>{language === 'ar' ? 'FR' : 'عربي'}</span>
+            <span aria-hidden="true">{language === 'ar' ? '🇫🇷' : '🇲🇦'}</span>
           </button>
 
-          {/* User Role Switcher Dropdown */}
-          <div className="relative">
-            <button
-              id="header-user-btn"
-              onClick={() => setShowUserDropdown(!showUserDropdown)}
-              className="flex items-center gap-1.5 bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-200 px-2.5 py-1.5 rounded-lg text-xs transition"
-            >
-              <div className="w-5 h-5 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-[10px]">
-                {currentUser.name.charAt(0)}
-              </div>
-              <span className="hidden sm:inline font-semibold max-w-[90px] truncate">{currentUser.name}</span>
-              <ChevronDown className="w-3 h-3 text-stone-400" />
-            </button>
-
-            {showUserDropdown && (
-              <div className="absolute left-0 sm:left-auto sm:right-0 mt-2 w-64 bg-stone-900 border border-stone-700 rounded-xl shadow-2xl z-50 p-2">
-                <div className="px-3 py-2 border-b border-stone-800 mb-1">
-                  <div className="text-xs font-bold text-stone-200">{currentUser.name}</div>
-                  <div className="text-[11px] text-amber-400 font-medium">{getRoleLabel(currentUser.role)}</div>
-                </div>
-
-                <div className="text-[11px] font-bold text-stone-400 px-3 py-1">
-                  {language === 'ar' ? 'تبديل دور المستخدم للتجربة:' : 'Changer de rôle pour tester :'}
-                </div>
-
-                <div className="space-y-1">
-                  {users.map((u) => (
-                    <button
-                      key={u.id}
-                      onClick={() => {
-                        setCurrentUser(u);
-                        setShowUserDropdown(false);
-                      }}
-                      className={`w-full text-right px-3 py-1.5 rounded-lg text-xs flex items-center justify-between transition ${
-                        currentUser.id === u.id
-                          ? 'bg-amber-500/20 text-amber-300 font-bold'
-                          : 'text-stone-300 hover:bg-stone-800'
-                      }`}
-                    >
-                      <div className="text-right">
-                        <div>{u.name}</div>
-                        <div className="text-[10px] text-stone-500">{getRoleLabel(u.role)}</div>
-                      </div>
-                      {currentUser.id === u.id && <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="pt-2 mt-2 border-t border-stone-800">
-                  <button
-                    onClick={() => {
-                      setActiveTab('users');
-                      setShowUserDropdown(false);
-                    }}
-                    className="w-full text-center py-1.5 px-2 bg-stone-800 hover:bg-stone-700 text-purple-300 hover:text-purple-200 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5"
-                  >
-                    <span>{language === 'ar' ? '⚙️ صفحة إدارة المستخدمين والصلاحيات' : '⚙️ Gestion des utilisateurs & rôles'}</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
         </div>
       </div>
     </header>

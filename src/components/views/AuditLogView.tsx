@@ -22,9 +22,16 @@ import {
   AlertCircle,
   FileText,
   Clock,
-  Sparkles
+  RotateCcw,
+  SlidersHorizontal,
+  CalendarRange,
+  Users,
+  Check,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { useFarm } from '../../context/FarmContext';
+import { getMoroccoDateISO } from '../../utils/date';
 import { AuditLogEntry, UserRole } from '../../types';
 
 interface AuditLogViewProps {
@@ -38,21 +45,46 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
     farms,
     currentUser,
     language,
-    currency
+    currency,
+    canCancelOperations,
+    cancelAuditOperation,
+    feedPurchases,
+    feedMovements,
+    dailyLogs
   } = useFarm();
 
+  // Search & Basic Filters
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedUserFilter, setSelectedUserFilter] = useState<string>('all');
   const [selectedActionFilter, setSelectedActionFilter] = useState<string>('all');
   const [selectedEntityFilter, setSelectedEntityFilter] = useState<string>('all');
-  const [selectedDateFilter, setSelectedDateFilter] = useState<string>('all'); // all, today, yesterday, 7days, 30days
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all'); // all, active, cancelled
+  
+  // Date Filtering Options
+  const [dateFilterMode, setDateFilterMode] = useState<string>('all'); // all, today, yesterday, 7days, this_month, last_month, custom
+  const [customStartDate, setCustomStartDate] = useState<string>('');
+  const [customEndDate, setCustomEndDate] = useState<string>('');
+  
+  // UI State
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState<boolean>(true);
   const [selectedLogDetail, setSelectedLogDetail] = useState<AuditLogEntry | null>(null);
+  const [cancellationError, setCancellationError] = useState('');
+
+  // Quick user map with count
+  const userStats = useMemo(() => {
+    const map: Record<string, number> = {};
+    auditLogs.forEach(l => {
+      const name = l.userName || 'غير معروف';
+      map[name] = (map[name] || 0) + 1;
+    });
+    return map;
+  }, [auditLogs]);
 
   // Quick statistics calculation
   const stats = useMemo(() => {
     const total = auditLogs.length;
-    const todayStr = new Date().toISOString().substring(0, 10);
-    const todayLogs = auditLogs.filter(l => l.timestamp.startsWith(todayStr));
+    const todayStr = getMoroccoDateISO();
+    const todayLogs = auditLogs.filter(l => getMoroccoDateISO(new Date(l.timestamp)) === todayStr);
     
     // Most active worker/user
     const userCountMap: Record<string, { name: string; count: number }> = {};
@@ -69,7 +101,7 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
 
     const creates = auditLogs.filter(l => l.action.toLowerCase().includes('create')).length;
     const updates = auditLogs.filter(l => l.action.toLowerCase().includes('update')).length;
-    const deletes = auditLogs.filter(l => l.action.toLowerCase().includes('delete')).length;
+    const deletes = auditLogs.filter(l => l.action.toLowerCase().includes('delete') || l.cancelledAt).length;
 
     return {
       total,
@@ -83,57 +115,107 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
     };
   }, [auditLogs]);
 
+  // Reset all filters to default
+  const handleResetFilters = () => {
+    setSearchQuery('');
+    setSelectedUserFilter('all');
+    setSelectedActionFilter('all');
+    setSelectedEntityFilter('all');
+    setSelectedStatusFilter('all');
+    setDateFilterMode('all');
+    setCustomStartDate('');
+    setCustomEndDate('');
+  };
+
+  // Check if any filter is active
+  const hasActiveFilters = useMemo(() => {
+    return (
+      searchQuery.trim() !== '' ||
+      selectedUserFilter !== 'all' ||
+      selectedActionFilter !== 'all' ||
+      selectedEntityFilter !== 'all' ||
+      selectedStatusFilter !== 'all' ||
+      dateFilterMode !== 'all' ||
+      customStartDate !== '' ||
+      customEndDate !== ''
+    );
+  }, [
+    searchQuery,
+    selectedUserFilter,
+    selectedActionFilter,
+    selectedEntityFilter,
+    selectedStatusFilter,
+    dateFilterMode,
+    customStartDate,
+    customEndDate
+  ]);
+
   // Filtered logs
   const filteredLogs = useMemo(() => {
     const now = new Date();
-    const todayStr = now.toISOString().substring(0, 10);
+    const todayStr = getMoroccoDateISO(now);
     
     const yesterday = new Date();
     yesterday.setDate(now.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().substring(0, 10);
+    const yesterdayStr = getMoroccoDateISO(yesterday);
 
     const sevenDaysAgo = new Date();
     sevenDaysAgo.setDate(now.getDate() - 7);
 
-    const thirtyDaysAgo = new Date();
-    thirtyDaysAgo.setDate(now.getDate() - 30);
+    // Month boundaries
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const firstDayThisMonth = new Date(currentYear, currentMonth, 1);
+    const firstDayLastMonth = new Date(currentYear, currentMonth - 1, 1);
+    const lastDayLastMonth = new Date(currentYear, currentMonth, 0);
 
     return auditLogs.filter(log => {
-      // User filter
+      // 1. User filter (by name or ID)
       if (selectedUserFilter !== 'all') {
         const matchesId = log.userId === selectedUserFilter;
         const matchesName = log.userName === selectedUserFilter;
         if (!matchesId && !matchesName) return false;
       }
 
-      // Action filter
+      // 2. Action filter (Create / Update / Delete / Other)
       if (selectedActionFilter !== 'all') {
-        const act = log.action.toLowerCase();
+        const act = (log.action || '').toLowerCase();
         if (selectedActionFilter === 'create' && !act.includes('create')) return false;
         if (selectedActionFilter === 'update' && !act.includes('update')) return false;
-        if (selectedActionFilter === 'delete' && !act.includes('delete')) return false;
+        if (selectedActionFilter === 'delete' && !act.includes('delete') && !log.cancelledAt) return false;
+        if (selectedActionFilter === 'auth' && !act.includes('login') && !act.includes('auth') && !act.includes('logout')) return false;
       }
 
-      // Entity filter
+      // 3. Entity filter (Department / Section)
       if (selectedEntityFilter !== 'all') {
         const ent = (log.entityType || log.entity || '').toLowerCase();
         if (ent !== selectedEntityFilter.toLowerCase()) return false;
       }
 
-      // Date filter
-      if (selectedDateFilter === 'today') {
-        if (!log.timestamp.startsWith(todayStr)) return false;
-      } else if (selectedDateFilter === 'yesterday') {
-        if (!log.timestamp.startsWith(yesterdayStr)) return false;
-      } else if (selectedDateFilter === '7days') {
-        const logDate = new Date(log.timestamp);
-        if (logDate < sevenDaysAgo) return false;
-      } else if (selectedDateFilter === '30days') {
-        const logDate = new Date(log.timestamp);
-        if (logDate < thirtyDaysAgo) return false;
+      // 4. Status filter (Active vs Cancelled)
+      if (selectedStatusFilter === 'active' && log.cancelledAt) return false;
+      if (selectedStatusFilter === 'cancelled' && !log.cancelledAt) return false;
+
+      // 5. Date filter
+      const logDateObj = new Date(log.timestamp);
+      const logDateStr = getMoroccoDateISO(logDateObj);
+
+      if (dateFilterMode === 'today') {
+        if (logDateStr !== todayStr) return false;
+      } else if (dateFilterMode === 'yesterday') {
+        if (logDateStr !== yesterdayStr) return false;
+      } else if (dateFilterMode === '7days') {
+        if (logDateObj < sevenDaysAgo) return false;
+      } else if (dateFilterMode === 'this_month') {
+        if (logDateObj < firstDayThisMonth) return false;
+      } else if (dateFilterMode === 'last_month') {
+        if (logDateObj < firstDayLastMonth || logDateObj > lastDayLastMonth) return false;
+      } else if (dateFilterMode === 'custom') {
+        if (customStartDate && logDateStr < customStartDate) return false;
+        if (customEndDate && logDateStr > customEndDate) return false;
       }
 
-      // Search query
+      // 6. Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesSearch = 
@@ -141,23 +223,37 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
           log.details?.toLowerCase().includes(q) ||
           log.action?.toLowerCase().includes(q) ||
           (log.entityType || log.entity || '').toLowerCase().includes(q) ||
-          log.timestamp?.includes(q);
+          log.entityId?.toLowerCase().includes(q) ||
+          log.timestamp?.includes(q) ||
+          log.cancellationReason?.toLowerCase().includes(q);
         if (!matchesSearch) return false;
       }
 
       return true;
     });
-  }, [auditLogs, selectedUserFilter, selectedActionFilter, selectedEntityFilter, selectedDateFilter, searchQuery]);
+  }, [
+    auditLogs,
+    selectedUserFilter,
+    selectedActionFilter,
+    selectedEntityFilter,
+    selectedStatusFilter,
+    dateFilterMode,
+    customStartDate,
+    customEndDate,
+    searchQuery
+  ]);
 
-  // Export CSV
+  // Export CSV of filtered logs
   const handleExportCSV = () => {
-    const headers = ['التاريخ والوقت', 'المستخدم / العامل', 'نوع الإجراء', 'الكيان المتأثر', 'التفاصيل'];
+    const headers = ['التاريخ والوقت', 'المستخدم / العامل', 'نوع الإجراء', 'القسم والكيان', 'الحالة', 'التفاصيل', 'معرف السجل'];
     const rows = filteredLogs.map(l => [
       `"${l.timestamp}"`,
       `"${l.userName}"`,
       `"${l.action}"`,
-      `"${l.entityType || l.entity || ''}"`,
-      `"${(l.details || '').replace(/"/g, '""')}"`
+      `"${getEntityLabel(l.entityType || l.entity)}"`,
+      `"${l.cancelledAt ? 'ملغى: ' + (l.cancellationReason || '') : 'ساري'}"`,
+      `"${(l.details || '').replace(/"/g, '""')}"`,
+      `"${l.id}"`
     ]);
 
     const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
@@ -165,13 +261,39 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.setAttribute('href', url);
-    link.setAttribute('download', `audit_log_activity_${new Date().toISOString().substring(0, 10)}.csv`);
+    link.setAttribute('download', `audit_log_filtered_${getMoroccoDateISO()}.csv`);
     document.body.appendChild(link);
     link.click();
     link.remove();
   };
 
-  const getActionBadge = (action: string) => {
+  const handleCancelOperation = (log: AuditLogEntry) => {
+    if (!canCancelOperations || log.cancelledAt) return;
+    setCancellationError('');
+    const confirmed = window.confirm('هل أنت متأكد من إلغاء هذه العملية باعتبارها تمت بالخطأ؟');
+    if (!confirmed) return;
+    if (log.entityType === 'feed_purchase') {
+      const usedFromSource = feedMovements.some(m => m.sourcePurchaseId === log.entityId && ['issue', 'transfer_out', 'waste'].includes(m.type));
+      const purchase = feedPurchases.find(p => p.id === log.entityId);
+      const usedByLinkedCycle = purchase?.cycleId ? dailyLogs.some(item => item.cycleId === purchase.cycleId && item.feedConsumedKg > 0) : false;
+      if (usedFromSource || usedByLinkedCycle) {
+        setCancellationError('لا يمكن إلغاء فاتورة العلف لأنها استُخدمت. ألغِ أولاً حركات الصرف أو السجلات اليومية المرتبطة بها.');
+        return;
+      }
+    }
+    const reason = 'تم الإلغاء باعتبار العملية تمت بالخطأ.';
+    if (cancelAuditOperation(log.id, reason)) setSelectedLogDetail(null);
+  };
+
+  const getActionBadge = (action: string, isCancelled?: boolean) => {
+    if (isCancelled) {
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-950/80 text-rose-300 border border-rose-800">
+          <Trash2 className="w-3 h-3" />
+          <span>عملية ملغاة</span>
+        </span>
+      );
+    }
     const act = (action || '').toLowerCase();
     if (act.includes('create')) {
       return (
@@ -238,8 +360,8 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
           </div>
           <p className="text-xs text-stone-400 mt-1">
             {language === 'ar'
-              ? 'تتبع شامل وفوري لجميع الحركات والإدخالات التي قام بها كل عامل أو مشرف أو محاسب لمنع التلاعب وضمان الشفافية'
-              : 'Traçabilité complète des saisies et modifications effectuées par chaque employé'}
+              ? 'تتبع شامل وفوري لجميع الحركات والإدخالات التي قام بها كل عامل أو مشرف أو محاسب مع فلترة متقدمة حسب التاريخ والمنفّذ ونوع الإجراء'
+              : 'Traçabilité complète des saisies et modifications avec filtres avancés par date, utilisateur et type d’opération'}
           </p>
         </div>
 
@@ -247,7 +369,7 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
           <button
             onClick={() => window.print()}
             className="flex-1 sm:flex-none px-3.5 py-2.5 bg-stone-800 hover:bg-stone-700 text-stone-200 border border-stone-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition"
-            title="طباعة سجل النشاط"
+            title="طباعة سجل النشاط المفلتر"
           >
             <Printer className="w-4 h-4 text-amber-400" />
             <span>طباعة السجل</span>
@@ -270,7 +392,7 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
           <div>
             <h1 className="text-xl font-black text-stone-900">سجل الرقابة والتتبع الأمني اليومي للعمليات (Audit Log)</h1>
             <p className="text-xs text-stone-600">
-              نظام مزارعنا لإدارة الدواجن • تاريخ الاستخراج: {new Date().toLocaleDateString('ar-MA')} - {new Date().toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' })}
+              مزارعنا لإدارة الدواجن • تاريخ الاستخراج: {new Date().toLocaleDateString('ar-MA')} - {new Date().toLocaleTimeString('ar-MA', { hour: '2-digit', minute: '2-digit' })}
             </p>
           </div>
           <div className="text-left text-xs text-stone-700 font-semibold">
@@ -337,8 +459,9 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
         </div>
       </div>
 
-      {/* Filter and Search Bar */}
-      <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 space-y-3 no-print">
+      {/* Advanced Filter Box */}
+      <div className="bg-stone-900 border border-stone-800 rounded-2xl p-4 space-y-4 no-print shadow-md">
+        {/* Top Search Bar & Toggle */}
         <div className="flex flex-col md:flex-row items-center gap-3">
           {/* Search box */}
           <div className="relative flex-1 w-full">
@@ -347,111 +470,316 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="ابحث باسم العامل، أو رقم الفاتورة، أو الإجراء، أو تفاصيل العملية..."
-              className="w-full pl-4 pr-10 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500"
+              placeholder="ابحث بالنص، اسم العامل، رقم الفاتورة، تفاصيل القيد، معرف العملية..."
+              className="w-full pl-4 pr-10 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-xs text-stone-100 placeholder-stone-500 focus:outline-none focus:border-amber-500 transition"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-200"
+                title="مسح البحث"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
           </div>
 
-          {/* User selector */}
-          <div className="w-full md:w-56">
-            <select
-              value={selectedUserFilter}
-              onChange={(e) => setSelectedUserFilter(e.target.value)}
-              className="w-full px-3 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-xs text-stone-200 font-bold focus:outline-none focus:border-amber-500"
-            >
-              <option value="all">جميع العمال والمستخدمين</option>
-              {users.map(u => (
-                <option key={u.id} value={u.name}>
-                  {u.name} ({u.role === 'admin' ? 'مدير عام' : u.role === 'farm_manager' ? 'مدير مزرعة' : u.role === 'accountant' ? 'محاسب' : 'مشرف/عامل'})
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Toggle Advanced Filters Button */}
+          <button
+            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+            className={`px-3.5 py-2.5 rounded-xl border text-xs font-bold flex items-center gap-1.5 transition ${
+              showAdvancedFilters || hasActiveFilters
+                ? 'bg-amber-500/10 border-amber-500/30 text-amber-300'
+                : 'bg-stone-950 border-stone-800 text-stone-400 hover:text-stone-200'
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4 text-amber-400" />
+            <span>فلترة متقدمة</span>
+            {hasActiveFilters && (
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+            )}
+            {showAdvancedFilters ? <ChevronUp className="w-3.5 h-3.5 ml-1" /> : <ChevronDown className="w-3.5 h-3.5 ml-1" />}
+          </button>
 
-          {/* Action selector */}
-          <div className="w-full md:w-40">
-            <select
-              value={selectedActionFilter}
-              onChange={(e) => setSelectedActionFilter(e.target.value)}
-              className="w-full px-3 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-xs text-stone-200 font-bold focus:outline-none focus:border-amber-500"
-            >
-              <option value="all">جميع أنواع الإجراءات</option>
-              <option value="create">إنشاء وإضافة جديدة</option>
-              <option value="update">تعديل وتحديث</option>
-              <option value="delete">حذف وإلغاء</option>
-            </select>
-          </div>
-
-          {/* Date range filter */}
-          <div className="w-full md:w-36">
-            <select
-              value={selectedDateFilter}
-              onChange={(e) => setSelectedDateFilter(e.target.value)}
-              className="w-full px-3 py-2.5 bg-stone-950 border border-stone-800 rounded-xl text-xs text-stone-200 font-bold focus:outline-none focus:border-amber-500"
-            >
-              <option value="all">كافة الفترات</option>
-              <option value="today">اليوم فقط</option>
-              <option value="yesterday">يوم أمس</option>
-              <option value="7days">آخر 7 أيام</option>
-              <option value="30days">آخر 30 يوماً</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Entity Fast Filter Chips */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
-          <span className="text-[11px] text-stone-500 font-bold px-1 whitespace-nowrap">القسم:</span>
-          {[
-            { id: 'all', label: 'الكل' },
-            { id: 'daily_log', label: 'السجلات اليومية للعنابر' },
-            { id: 'sale', label: 'المبيعات' },
-            { id: 'feed_purchase', label: 'الأعلاف' },
-            { id: 'med_purchase', label: 'الأدوية واللقاحات' },
-            { id: 'expense', label: 'المصاريف' },
-            { id: 'transaction', label: 'المعاملات المالية' },
-            { id: 'worker_transaction', label: 'أجور وسلف العمال' },
-            { id: 'cycle', label: 'دورات التربية' }
-          ].map(chip => (
+          {/* Reset Filters button */}
+          {hasActiveFilters && (
             <button
-              key={chip.id}
-              onClick={() => setSelectedEntityFilter(chip.id)}
-              className={`px-3 py-1 rounded-lg font-bold text-xs whitespace-nowrap transition ${
-                selectedEntityFilter === chip.id
-                  ? 'bg-amber-500 text-stone-950 shadow-sm'
-                  : 'bg-stone-800/80 text-stone-300 hover:bg-stone-700'
-              }`}
+              onClick={handleResetFilters}
+              className="px-3.5 py-2.5 bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800/60 text-rose-300 rounded-xl text-xs font-bold flex items-center gap-1.5 transition"
+              title="إعادة تعيين كافة الفلاتر"
             >
-              {chip.label}
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>تفريغ الفلاتر</span>
             </button>
-          ))}
+          )}
         </div>
+
+        {/* Detailed Filter Controls */}
+        {showAdvancedFilters && (
+          <div className="pt-3 border-t border-stone-800 space-y-3.5 animate-fade-in">
+            {/* 1. Date Filter Controls */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-stone-300">
+                <div className="flex items-center gap-1.5">
+                  <Calendar className="w-4 h-4 text-amber-400" />
+                  <span>تصفية حسب التاريخ والمدة:</span>
+                </div>
+                {dateFilterMode !== 'all' && (
+                  <button
+                    onClick={() => {
+                      setDateFilterMode('all');
+                      setCustomStartDate('');
+                      setCustomEndDate('');
+                    }}
+                    className="text-[11px] text-amber-400 hover:underline"
+                  >
+                    عرض كل التواريخ
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-1.5">
+                {[
+                  { id: 'all', label: 'كافة الفترات' },
+                  { id: 'today', label: 'اليوم فقط' },
+                  { id: 'yesterday', label: 'يوم أمس' },
+                  { id: '7days', label: 'آخر 7 أيام' },
+                  { id: 'this_month', label: 'هذا الشهر' },
+                  { id: 'last_month', label: 'الشهر الماضي' },
+                  { id: 'custom', label: 'نطاق مخصص 📅' }
+                ].map(period => (
+                  <button
+                    key={period.id}
+                    onClick={() => setDateFilterMode(period.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                      dateFilterMode === period.id
+                        ? 'bg-amber-500 text-stone-950 shadow-sm'
+                        : 'bg-stone-950 text-stone-300 border border-stone-800 hover:bg-stone-800'
+                    }`}
+                  >
+                    {period.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Custom Date Range Selectors */}
+              {dateFilterMode === 'custom' && (
+                <div className="p-3 bg-stone-950 rounded-xl border border-stone-800 flex flex-wrap items-center gap-3 animate-fade-in text-xs">
+                  <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                    <span className="text-stone-400 font-bold whitespace-nowrap">من تاريخ:</span>
+                    <input
+                      type="date"
+                      value={customStartDate}
+                      onChange={(e) => setCustomStartDate(e.target.value)}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-lg p-2 text-stone-100 font-bold text-xs focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                    <span className="text-stone-400 font-bold whitespace-nowrap">إلى تاريخ:</span>
+                    <input
+                      type="date"
+                      value={customEndDate}
+                      onChange={(e) => setCustomEndDate(e.target.value)}
+                      className="w-full bg-stone-900 border border-stone-700 rounded-lg p-2 text-stone-100 font-bold text-xs focus:outline-none focus:border-amber-500"
+                    />
+                  </div>
+
+                  {(customStartDate || customEndDate) && (
+                    <button
+                      onClick={() => {
+                        setCustomStartDate('');
+                        setCustomEndDate('');
+                      }}
+                      className="px-2.5 py-2 bg-stone-800 hover:bg-stone-700 text-stone-300 rounded-lg text-xs font-bold transition"
+                    >
+                      مسح النطاق
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 2. User & Action & Status Dropdowns Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* User Selector */}
+              <div>
+                <label className="block text-[11px] font-bold text-stone-300 mb-1 flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-purple-400" />
+                  <span>المستخدم / المنفّذ:</span>
+                </label>
+                <select
+                  value={selectedUserFilter}
+                  onChange={(e) => setSelectedUserFilter(e.target.value)}
+                  className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-xl text-xs text-stone-200 font-bold focus:outline-none focus:border-amber-500"
+                >
+                  <option value="all">جميع العمال والمستخدمين ({users.length})</option>
+                  {users.map(u => {
+                    const count = userStats[u.name] || 0;
+                    const roleTitle = u.role === 'admin' ? 'مدير عام' : u.role === 'farm_manager' ? 'مدير مزرعة' : u.role === 'accountant' ? 'محاسب' : 'مشرف/عامل';
+                    return (
+                      <option key={u.id} value={u.name}>
+                        {u.name} — {roleTitle} ({count} عملية)
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+
+              {/* Action Type Selector */}
+              <div>
+                <label className="block text-[11px] font-bold text-stone-300 mb-1 flex items-center gap-1.5">
+                  <Activity className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>نوع العملية والإجراء:</span>
+                </label>
+                <select
+                  value={selectedActionFilter}
+                  onChange={(e) => setSelectedActionFilter(e.target.value)}
+                  className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-xl text-xs text-stone-200 font-bold focus:outline-none focus:border-amber-500"
+                >
+                  <option value="all">كافة الإجراءات والعمليات</option>
+                  <option value="create">إنشاء وتسجيل جديد (Create / Add)</option>
+                  <option value="update">تعديل وتحديث سجل (Update / Edit)</option>
+                  <option value="delete">حذف أو إلغاء عملية (Delete / Cancel)</option>
+                  <option value="auth">تسجيل دخول والنظام (Auth / Login)</option>
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <div>
+                <label className="block text-[11px] font-bold text-stone-300 mb-1 flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
+                  <span>حالة العملية:</span>
+                </label>
+                <select
+                  value={selectedStatusFilter}
+                  onChange={(e) => setSelectedStatusFilter(e.target.value)}
+                  className="w-full px-3 py-2 bg-stone-950 border border-stone-800 rounded-xl text-xs text-stone-200 font-bold focus:outline-none focus:border-amber-500"
+                >
+                  <option value="all">الكل (سارية + ملغاة)</option>
+                  <option value="active">العمليات السارية والمعتمدة فقط</option>
+                  <option value="cancelled">العمليات الملغاة بالخطأ فقط</option>
+                </select>
+              </div>
+            </div>
+
+            {/* 3. Section / Entity Filter Chips */}
+            <div className="space-y-1.5">
+              <span className="text-[11px] text-stone-400 font-bold flex items-center gap-1">
+                <Layers className="w-3.5 h-3.5 text-amber-400" />
+                <span>القسم المتأثر (النطاق):</span>
+              </span>
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+                {[
+                  { id: 'all', label: 'كافة الأقسام' },
+                  { id: 'daily_log', label: 'السجلات اليومية للعنابر' },
+                  { id: 'sale', label: 'المبيعات والتحصيلات' },
+                  { id: 'feed_purchase', label: 'مشتريات الأعلاف' },
+                  { id: 'med_purchase', label: 'الأدوية واللقاحات' },
+                  { id: 'expense', label: 'المصاريف العامة' },
+                  { id: 'transaction', label: 'المعاملات المالية والخزن' },
+                  { id: 'worker_transaction', label: 'أجور وسلف العمال' },
+                  { id: 'cycle', label: 'دورات التربية' },
+                  { id: 'partner', label: 'الزبائن والموردين' }
+                ].map(chip => (
+                  <button
+                    key={chip.id}
+                    onClick={() => setSelectedEntityFilter(chip.id)}
+                    className={`px-3 py-1 rounded-lg font-bold text-xs whitespace-nowrap transition ${
+                      selectedEntityFilter === chip.id
+                        ? 'bg-amber-500 text-stone-950 shadow-sm'
+                        : 'bg-stone-950 text-stone-300 border border-stone-800 hover:bg-stone-800'
+                    }`}
+                  >
+                    {chip.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Active Filters Summary Bar */}
+            {hasActiveFilters && (
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-stone-800/80 text-[11px]">
+                <span className="text-stone-400 font-bold">الفلاتر المطبقة:</span>
+
+                {searchQuery && (
+                  <span className="px-2 py-0.5 rounded-md bg-stone-800 text-stone-200 border border-stone-700 flex items-center gap-1">
+                    <span>بحث: "{searchQuery}"</span>
+                    <button onClick={() => setSearchQuery('')} className="hover:text-rose-400"><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+
+                {selectedUserFilter !== 'all' && (
+                  <span className="px-2 py-0.5 rounded-md bg-purple-950/60 text-purple-300 border border-purple-800/60 flex items-center gap-1">
+                    <span>المستخدم: {selectedUserFilter}</span>
+                    <button onClick={() => setSelectedUserFilter('all')} className="hover:text-rose-400"><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+
+                {selectedActionFilter !== 'all' && (
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-950/60 text-emerald-300 border border-emerald-800/60 flex items-center gap-1">
+                    <span>الإجراء: {selectedActionFilter}</span>
+                    <button onClick={() => setSelectedActionFilter('all')} className="hover:text-rose-400"><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+
+                {selectedEntityFilter !== 'all' && (
+                  <span className="px-2 py-0.5 rounded-md bg-amber-950/60 text-amber-300 border border-amber-800/60 flex items-center gap-1">
+                    <span>القسم: {getEntityLabel(selectedEntityFilter)}</span>
+                    <button onClick={() => setSelectedEntityFilter('all')} className="hover:text-rose-400"><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+
+                {dateFilterMode !== 'all' && (
+                  <span className="px-2 py-0.5 rounded-md bg-blue-950/60 text-blue-300 border border-blue-800/60 flex items-center gap-1">
+                    <span>التاريخ: {dateFilterMode === 'custom' ? `${customStartDate || 'بداية'} إلى ${customEndDate || 'الآن'}` : dateFilterMode}</span>
+                    <button onClick={() => { setDateFilterMode('all'); setCustomStartDate(''); setCustomEndDate(''); }} className="hover:text-rose-400"><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+
+                {selectedStatusFilter !== 'all' && (
+                  <span className="px-2 py-0.5 rounded-md bg-stone-800 text-stone-200 border border-stone-700 flex items-center gap-1">
+                    <span>الحالة: {selectedStatusFilter === 'active' ? 'سارية فقط' : 'ملغاة فقط'}</span>
+                    <button onClick={() => setSelectedStatusFilter('all')} className="hover:text-rose-400"><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Audit Log Table */}
       <div className="bg-stone-900 border border-stone-800 rounded-2xl overflow-hidden shadow-lg">
-        <div className="p-4 border-b border-stone-800 flex items-center justify-between">
+        <div className="p-4 border-b border-stone-800 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <span className="text-xs font-black text-stone-200">العمليات المطابقة للبحث:</span>
-            <span className="px-2 py-0.5 bg-stone-800 text-amber-400 rounded text-xs font-black">
-              {filteredLogs.length} حركة
+            <span className="px-2.5 py-0.5 bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-lg text-xs font-black">
+              {filteredLogs.length} حركة مسجلة
             </span>
+            {hasActiveFilters && (
+              <span className="text-[11px] text-stone-400 font-medium">
+                (من أصل {auditLogs.length})
+              </span>
+            )}
           </div>
           <span className="text-xs text-stone-500 font-medium">مرتبة ترتيباً زمنياً من الأحدث إلى الأقدم</span>
         </div>
 
         {filteredLogs.length === 0 ? (
-          <div className="p-12 text-center text-stone-500 space-y-2">
+          <div className="p-12 text-center text-stone-500 space-y-3">
             <History className="w-12 h-12 mx-auto text-stone-600 stroke-[1.5]" />
-            <p className="text-sm font-bold text-stone-300">لم يتم العثور على أي نشاط مطابق للبحث</p>
-            <p className="text-xs text-stone-500">جرّب تغيير فلاتر التاريخ أو اسم العامل أو مصطلح البحث</p>
+            <p className="text-sm font-bold text-stone-300">لم يتم العثور على أي نشاط مطابق لمعايير الفلترة المحددة</p>
+            <p className="text-xs text-stone-500">جرّب تغيير فلاتر التاريخ أو اسم العامل أو نوع العملية</p>
+            {hasActiveFilters && (
+              <button
+                onClick={handleResetFilters}
+                className="mt-2 px-4 py-2 bg-stone-800 hover:bg-stone-700 text-amber-300 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 transition"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>إعادة ضبط كافة الفلاتر</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -489,7 +817,7 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
 
                     <td className="p-3.5 whitespace-nowrap">
                       <div className="flex items-center gap-2">
-                        <div className="w-7 h-7 rounded-full bg-purple-500/20 text-purple-300 font-bold flex items-center justify-center text-xs">
+                        <div className="w-7 h-7 rounded-full bg-purple-500/20 text-purple-300 font-bold flex items-center justify-center text-xs border border-purple-500/30">
                           {log.userName?.charAt(0) || 'ع'}
                         </div>
                         <div>
@@ -500,7 +828,7 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
                     </td>
 
                     <td className="p-3.5 whitespace-nowrap">
-                      {getActionBadge(log.action)}
+                      {getActionBadge(log.action, !!log.cancelledAt)}
                     </td>
 
                     <td className="p-3.5 whitespace-nowrap">
@@ -513,6 +841,11 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
                       <p className="line-clamp-2 leading-relaxed">
                         {log.details || '-'}
                       </p>
+                      {log.cancelledAt && (
+                        <span className="inline-flex mt-1 px-2 py-0.5 rounded bg-rose-950/60 text-rose-300 border border-rose-800/60 text-[10px] font-bold">
+                          أُلغيت العملية: {log.cancellationReason}
+                        </span>
+                      )}
                     </td>
 
                     <td className="p-3.5 text-center no-print whitespace-nowrap">
@@ -553,6 +886,7 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
             </div>
 
             <div className="p-5 space-y-4 text-xs">
+              {cancellationError && <div role="alert" className="rounded-xl border border-rose-800/70 bg-rose-950/40 p-3 text-rose-300 font-bold">{cancellationError}</div>}
               <div className="grid grid-cols-2 gap-3 bg-stone-950 p-3.5 rounded-xl border border-stone-800">
                 <div>
                   <span className="text-[10px] text-stone-500 block font-bold">العامل / المنفّذ:</span>
@@ -564,7 +898,7 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
                 </div>
                 <div>
                   <span className="text-[10px] text-stone-500 block font-bold">نوع الحركة:</span>
-                  <div className="mt-1">{getActionBadge(selectedLogDetail.action)}</div>
+                  <div className="mt-1">{getActionBadge(selectedLogDetail.action, !!selectedLogDetail.cancelledAt)}</div>
                 </div>
                 <div>
                   <span className="text-[10px] text-stone-500 block font-bold">القسم المتأثر:</span>
@@ -579,6 +913,11 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
                 <div className="p-3.5 bg-stone-950 border border-stone-800 rounded-xl text-stone-200 text-xs leading-relaxed font-semibold">
                   {selectedLogDetail.details}
                 </div>
+                {selectedLogDetail.cancelledAt && (
+                  <div className="p-3 bg-rose-950/30 border border-rose-800/60 rounded-xl text-rose-300 text-xs font-bold">
+                    أُلغيت هذه العملية بواسطة {selectedLogDetail.cancelledBy} — السبب: {selectedLogDetail.cancellationReason}
+                  </div>
+                )}
               </div>
 
               <div className="bg-stone-800/50 p-3 rounded-xl border border-stone-800 flex items-center justify-between text-[11px] text-stone-400">
@@ -588,6 +927,14 @@ export const AuditLogView: React.FC<AuditLogViewProps> = ({ onNavigate }) => {
             </div>
 
             <div className="p-4 border-t border-stone-800 flex justify-end gap-2 bg-stone-950">
+              {canCancelOperations && !selectedLogDetail.cancelledAt && selectedLogDetail.entityType !== 'audit_cancel' && (
+                <button
+                  onClick={() => handleCancelOperation(selectedLogDetail)}
+                  className="px-4 py-2 bg-rose-700 hover:bg-rose-600 text-white font-bold rounded-xl text-xs transition"
+                >
+                  إلغاء العملية بالخطأ
+                </button>
+              )}
               <button
                 onClick={() => setSelectedLogDetail(null)}
                 className="px-4 py-2 bg-stone-800 hover:bg-stone-700 text-stone-200 font-bold rounded-xl text-xs transition"

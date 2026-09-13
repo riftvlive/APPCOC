@@ -13,6 +13,8 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { useFarm } from '../../context/FarmContext';
+import { getMoroccoDateISO } from '../../utils/date';
+import { ProfitExpensePdfModal } from '../reports/ProfitExpensePdfModal';
 
 export const ReportsView: React.FC = () => {
   const {
@@ -32,6 +34,7 @@ export const ReportsView: React.FC = () => {
   const [reportType, setReportType] = useState<'pnl' | 'cycles_cost' | 'debts' | 'sales_summary'>('pnl');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [isPdfModalOpen, setIsPdfModalOpen] = useState(false);
 
   // CSV Export utility
   const handleExportCSV = () => {
@@ -60,18 +63,27 @@ export const ReportsView: React.FC = () => {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `farm_report_${reportType}_${new Date().toISOString().substring(0, 10)}.csv`);
+    link.setAttribute('download', `farm_report_${reportType}_${getMoroccoDateISO()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   const handlePrint = () => {
-    window.print();
+    if (reportType === 'pnl') {
+      setIsPdfModalOpen(true);
+    } else {
+      window.print();
+    }
   };
 
   return (
     <div className="space-y-5 animate-fade-in pb-12">
+      <ProfitExpensePdfModal 
+        isOpen={isPdfModalOpen} 
+        onClose={() => setIsPdfModalOpen(false)} 
+        initialFarmId={selectedFarmId || undefined}
+      />
       {/* Header */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-stone-900 border border-stone-800 rounded-2xl p-4 sm:p-5 no-print">
         <div>

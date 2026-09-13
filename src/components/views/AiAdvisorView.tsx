@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Wheat,
   Scale
+  ,Settings2
 } from 'lucide-react';
 import { useFarm } from '../../context/FarmContext';
 
@@ -23,10 +24,16 @@ export const AiAdvisorView: React.FC = () => {
     feedPurchases,
     currency,
     language
+    ,currentUser
   } = useFarm();
 
   const [prompt, setPrompt] = useState('');
   const [loading, setLoading] = useState(false);
+  const [aiConfig, setAiConfig] = useState<{ configured: boolean; enabled: boolean; model: string } | null>(null);
+  const [apiKey, setApiKey] = useState('');
+  const [showSettings, setShowSettings] = useState(false);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState('');
   const [messages, setMessages] = useState<Array<{ sender: 'user' | 'ai'; text: string }>>([
     {
       sender: 'ai',
@@ -44,6 +51,26 @@ export const AiAdvisorView: React.FC = () => {
   const [simFeedPriceDelta, setSimFeedPriceDelta] = useState(0); // +/- in DH
   const [simMortalityTarget, setSimMortalityTarget] = useState(3.5); // %
   const [simSalePriceTarget, setSimSalePriceTarget] = useState(16.5); // DH/kg
+
+  React.useEffect(() => {
+    if (currentUser.role !== 'admin') return;
+    fetch('/api/ai/config').then(response => response.ok ? response.json() : null).then(setAiConfig).catch(() => undefined);
+  }, [currentUser.role]);
+
+  const saveAiSettings = async () => {
+    setSavingSettings(true);
+    setSettingsMessage('');
+    try {
+      const response = await fetch('/api/ai/config', {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ apiKey, enabled: true, model: aiConfig?.model || 'gemini-3.7-flash' })
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'تعذر الحفظ');
+      setAiConfig(result); setApiKey(''); setSettingsMessage('تم حفظ المفتاح بشكل مشفر واختبار الإعداد جاهز.');
+    } catch (error) { setSettingsMessage(error instanceof Error ? error.message : 'تعذر حفظ الإعدادات'); }
+    finally { setSavingSettings(false); }
+  };
 
   const handleAskAI = async (queryText?: string) => {
     const textToSend = queryText || prompt;
@@ -99,6 +126,16 @@ export const AiAdvisorView: React.FC = () => {
             </p>
           </div>
         </div>
+        {currentUser.role === 'admin' && <div className="mt-4 pt-3 border-t border-amber-500/20 flex items-center justify-between gap-3">
+          <span className="text-xs text-stone-300">حالة الربط: <b className={aiConfig?.configured ? 'text-emerald-400' : 'text-rose-300'}>{aiConfig?.configured ? 'متصل بـ Gemini' : 'غير مهيأ'}</b></span>
+          <button onClick={() => setShowSettings(!showSettings)} className="px-3 py-2 rounded-xl bg-stone-800 hover:bg-stone-700 text-xs font-bold flex items-center gap-1.5"><Settings2 className="w-4 h-4" /> إعدادات API</button>
+        </div>}
+        {showSettings && currentUser.role === 'admin' && <div className="mt-3 p-3 rounded-xl bg-stone-950/70 border border-stone-800 space-y-2">
+          <label className="block text-xs text-stone-300 font-bold">مفتاح Gemini API</label>
+          <input type="password" value={apiKey} onChange={e => setApiKey(e.target.value)} placeholder={aiConfig?.configured ? 'مفتاح محفوظ — اتركه فارغاً للإبقاء عليه' : 'AIza...'} className="w-full bg-stone-900 border border-stone-700 rounded-xl px-3 py-2 text-xs" />
+          <div className="flex items-center gap-2"><button onClick={saveAiSettings} disabled={savingSettings || (!apiKey && !aiConfig?.configured)} className="px-3 py-2 bg-amber-500 text-stone-950 rounded-xl text-xs font-black disabled:opacity-50">{savingSettings ? 'جاري الحفظ...' : 'حفظ الربط'}</button>{settingsMessage && <span className="text-[11px] text-stone-300">{settingsMessage}</span>}</div>
+          <p className="text-[10px] text-stone-500">المفتاح لا يظهر في الواجهة ولا يتم إرساله للمستخدمين؛ يتم حفظه مشفراً على الخادم.</p>
+        </div>}
       </div>
 
       {/* Main Grid: Chat Left/Middle + Simulator Right */}

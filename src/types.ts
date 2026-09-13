@@ -36,6 +36,20 @@ export type ExpenseCategory =
 
 export type PartnerType = 'supplier' | 'customer' | 'both';
 
+export const CHICK_BREEDS = [
+  'Ross 308',
+  'Cobb 500',
+  'Hubbard Classic',
+  'Arbor Acres Plus',
+  'Indian River',
+  'Sasso',
+  'ISA Brown',
+  'Lohmann Brown',
+  'Hy-Line Brown',
+  'Novogen Brown',
+  'بلدي محسن'
+] as const;
+
 export interface UserPermissions {
   canManageFarms: boolean;
   canManageCycles: boolean;
@@ -46,6 +60,7 @@ export interface UserPermissions {
   canManageWorkers: boolean;
   canViewReports: boolean;
   canManageUsers: boolean;
+  canCancelOperations: boolean;
 }
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, UserPermissions> = {
@@ -59,6 +74,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, UserPermissions> = {
     canManageWorkers: true,
     canViewReports: true,
     canManageUsers: true,
+    canCancelOperations: true,
   },
   farm_manager: {
     canManageFarms: true,
@@ -70,6 +86,7 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, UserPermissions> = {
     canManageWorkers: true,
     canViewReports: true,
     canManageUsers: false,
+    canCancelOperations: false,
   },
   accountant: {
     canManageFarms: false,
@@ -81,10 +98,11 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, UserPermissions> = {
     canManageWorkers: true,
     canViewReports: true,
     canManageUsers: false,
+    canCancelOperations: false,
   },
   worker: {
     canManageFarms: false,
-    canManageCycles: false,
+    canManageCycles: true,
     canEnterDailyLogs: true,
     canManageSales: false,
     canManagePurchases: false,
@@ -92,17 +110,21 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<UserRole, UserPermissions> = {
     canManageWorkers: false,
     canViewReports: false,
     canManageUsers: false,
+    canCancelOperations: false,
   },
 };
 
 export interface User {
   id: string;
   name: string;
+  jobTitle?: string;
   phone: string;
   email?: string;
   username?: string;
   role: UserRole;
+  pin?: string;
   allowedFarmIds?: string[]; // empty or undefined means all
+  allowedHangarIds?: string[]; // format: farmId:barn-1; empty or undefined means all barns in allowed farms
   permissions?: Partial<UserPermissions>;
   status?: 'active' | 'inactive';
   avatar?: string;
@@ -153,6 +175,10 @@ export interface DailyLog {
   sampleAverageWeightGrams?: number;
   temperatureCelsius?: number;
   humidityPercent?: number;
+  medicationPurchaseId?: string;
+  medicationName?: string;
+  medicationQuantity?: number;
+  medicationUnit?: string;
   notes?: string;
 }
 
@@ -160,6 +186,7 @@ export interface PoultryCycle {
   id: string;
   cycleNumber: string;
   farmId: string;
+  workerIds?: string[];
   barnNumber?: string;
   startDate: string;
   chickEntryDate: string;
@@ -173,6 +200,11 @@ export interface PoultryCycle {
   status: CycleStatus | 'active';
   notes?: string;
   targetWeightKg?: number;
+  chickTransportCost?: number;
+  chickVaccineCost?: number;
+  chickPaidAmount?: number;
+  chickPaymentMethod?: PaymentMethod;
+  chickAccountId?: string;
   createdAt?: string;
 }
 
@@ -215,6 +247,59 @@ export interface ChickPurchase {
   createdAt?: string;
 }
 
+export interface ChickSale {
+  id: string;
+  invoiceNumber: string;
+  date: string;
+  customerId: string;
+  customerName?: string;
+  farmId?: string;
+  breed: string;
+  chickType?: string;
+  sourceHatcherySupplierId?: string;
+  sourceFarmId?: string;
+  quantity: number;
+  bonusCount?: number;
+  unitPrice: number;
+  costUnitPrice?: number;
+  totalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentMethod: PaymentMethod;
+  accountId?: string;
+  deliveryDate?: string;
+  truckPlate?: string;
+  driverName?: string;
+  driverPhone?: string;
+  notes?: string;
+  createdAt?: string;
+}
+
+export interface FeedSale {
+  id: string;
+  invoiceNumber: string;
+  date: string;
+  customerId: string;
+  customerName?: string;
+  farmId?: string;
+  feedType: 'starter' | 'grower' | 'finisher' | 'other';
+  brand: string;
+  sourceFarmId?: string;
+  quantityKg: number;
+  bagsCount?: number;
+  unitPricePerKg: number;
+  costPricePerKg?: number;
+  totalAmount: number;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentMethod: PaymentMethod;
+  accountId?: string;
+  truckPlate?: string;
+  driverName?: string;
+  notes?: string;
+  createdAt?: string;
+}
+
 export interface FeedPurchase {
   id: string;
   invoiceNumber?: string;
@@ -236,6 +321,28 @@ export interface FeedPurchase {
   notes?: string;
 }
 
+export type FeedMovementType = 'purchase' | 'opening' | 'transfer_in' | 'transfer_out' | 'issue' | 'return' | 'waste' | 'adjustment' | 'sale';
+
+export interface FeedStockMovement {
+  id: string;
+  date: string;
+  type: FeedMovementType;
+  quantityKg: number;
+  feedType?: FeedPurchase['feedType'];
+  brand?: string;
+  farmId: string;
+  cycleId?: string;
+  barnNumber?: string;
+  sourceFarmId?: string;
+  destinationFarmId?: string;
+  sourcePurchaseId?: string;
+  dailyLogId?: string;
+  unitCostPerKg?: number;
+  totalCost?: number;
+  performedBy?: string;
+  notes?: string;
+}
+
 export interface MedicationPurchase {
   id: string;
   date: string;
@@ -253,6 +360,25 @@ export interface MedicationPurchase {
   remainingAmount: number;
   accountId?: string;
   dosageInstructions?: string;
+  notes?: string;
+}
+
+export type MedicationMovementType = 'purchase' | 'opening' | 'issue' | 'return' | 'waste' | 'adjustment';
+
+export interface MedicationStockMovement {
+  id: string;
+  date: string;
+  type: MedicationMovementType;
+  medicationPurchaseId?: string;
+  medicationName?: string;
+  quantity: number;
+  unit: string;
+  unitCost?: number;
+  totalCost?: number;
+  farmId: string;
+  cycleId?: string;
+  dailyLogId?: string;
+  performedBy?: string;
   notes?: string;
 }
 
@@ -316,6 +442,7 @@ export interface Partner {
 
 export interface Worker {
   id: string;
+  userId?: string;
   name: string;
   phone: string;
   nationalId?: string;
@@ -386,6 +513,9 @@ export interface AuditLogEntry {
   details: string;
   previousValue?: any;
   newValue?: any;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancellationReason?: string;
 }
 
 export interface AppNotification {
@@ -419,6 +549,8 @@ export interface CycleFinancialSummary {
   averageBirdWeightKg: number;
 
   // Feeds stats
+  totalFeedPurchasedKg: number;
+  totalFeedConsumedKg: number;
   totalFeedKg: number;
   totalFeedCost: number;
   feedCostPerBird: number;
@@ -483,3 +615,4 @@ export interface AutoBackupSettings {
   maxSnapshotsToKeep: number;
   lastBackupTimestamp?: string;
 }
+

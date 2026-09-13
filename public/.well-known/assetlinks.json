@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "net.riftv.android.twa",
+      "sha256_cert_fingerprints": [
+        "4F:DC:24:EE:D2:BB:5C:C6:74:54:CE:B5:C0:18:C8:97:56:F0:2E:39:EA:3B:73:FA:5C:4A:CE:77:39:B4:66:1D"
+      ]
+    }
+  }
+]
